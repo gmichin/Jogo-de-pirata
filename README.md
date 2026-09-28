@@ -1,2 +1,2 @@
-# Jogo-de-pirata
-Jogo de pirata
+# Jogo de pirata
+Desenvolvimento de game realizado para desafio
