@@ -1,2 +1,2 @@
 # Jogo de pirata
-Desenvolvimento de game realizado para desafio
+Desafio para concorrer a vaga de desenvolvedor de games
