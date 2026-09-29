@@ -12,6 +12,7 @@ interface Props {
 export default function Options({ initial, onSave, onCancel }: Props) {
   const [sessionTime, setSessionTime] = useState(initial.sessionTime);
   const [spawnInterval, setSpawnInterval] = useState(initial.spawnInterval);
+  const [players, setPlayers] = useState<1 | 2>(initial.players);
   const [error, setError] = useState<string | null>(null);
 
   const handleSave = () => {
@@ -19,14 +20,16 @@ export default function Options({ initial, onSave, onCancel }: Props) {
       sessionTime < GAME_CONFIG.session.minDuration ||
       sessionTime > GAME_CONFIG.session.maxDuration
     ) {
-      setError(`Session time must be between ${GAME_CONFIG.session.minDuration} and ${GAME_CONFIG.session.maxDuration} seconds.`);
+      setError(
+        `Session time must be between ${GAME_CONFIG.session.minDuration} and ${GAME_CONFIG.session.maxDuration} seconds.`
+      );
       return;
     }
     if (spawnInterval <= 0) {
       setError('Spawn interval must be greater than zero.');
       return;
     }
-    const cfg: RunConfig = { sessionTime, spawnInterval };
+    const cfg: RunConfig = { sessionTime, spawnInterval, players };
     saveOptions(cfg);
     onSave(cfg);
   };
@@ -55,6 +58,14 @@ export default function Options({ initial, onSave, onCancel }: Props) {
           value={spawnInterval}
           onChange={(e) => setSpawnInterval(Number(e.target.value))}
         />
+      </label>
+
+      <label>
+        Players
+        <select value={players} onChange={(e) => setPlayers(Number(e.target.value) as 1 | 2)}>
+          <option value={1}>1 Player</option>
+          <option value={2}>2 Players (Co-op)</option>
+        </select>
       </label>
 
       {error && <p className="error" role="alert">{error}</p>}

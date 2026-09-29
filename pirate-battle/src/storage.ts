@@ -5,28 +5,26 @@ const OPTS_KEY = 'pirate-battle:options';
 const LAST_KEY = 'pirate-battle:last-result';
 
 export function loadOptions(): RunConfig {
+  const fallback: RunConfig = {
+    sessionTime: GAME_CONFIG.session.defaultDuration,
+    spawnInterval: GAME_CONFIG.spawn.defaultInterval,
+    players: 1,
+  };
   try {
     const raw = localStorage.getItem(OPTS_KEY);
-    if (!raw) {
-      return {
-        sessionTime: GAME_CONFIG.session.defaultDuration,
-        spawnInterval: GAME_CONFIG.spawn.defaultInterval,
-      };
-    }
+    if (!raw) return fallback;
     const parsed = JSON.parse(raw);
     return {
       sessionTime: clamp(
-        Number(parsed.sessionTime) || GAME_CONFIG.session.defaultDuration,
+        Number(parsed.sessionTime) || fallback.sessionTime,
         GAME_CONFIG.session.minDuration,
         GAME_CONFIG.session.maxDuration
       ),
-      spawnInterval: Math.max(0.5, Number(parsed.spawnInterval) || GAME_CONFIG.spawn.defaultInterval),
+      spawnInterval: Math.max(0.5, Number(parsed.spawnInterval) || fallback.spawnInterval),
+      players: parsed.players === 2 ? 2 : 1,
     };
   } catch {
-    return {
-      sessionTime: GAME_CONFIG.session.defaultDuration,
-      spawnInterval: GAME_CONFIG.spawn.defaultInterval,
-    };
+    return fallback;
   }
 }
 

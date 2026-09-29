@@ -5,15 +5,22 @@
   --accent: #ffd166;
   --text: #e9f1fa;
   --danger: #ff6b6b;
+  --muted: #9fb3c8;
 }
 
 * { box-sizing: border-box; }
 
-body {
+html, body, #root {
   margin: 0;
-  font-family: system-ui, sans-serif;
+  padding: 0;
+  min-height: 100vh;
   background: var(--bg);
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
 }
 
 .app {
@@ -24,14 +31,27 @@ body {
   padding: 16px;
 }
 
-.menu, .options, .result {
+/* ---------- Generic panels ---------- */
+.menu,
+.options,
+.result {
   background: var(--panel);
   padding: 24px;
   border-radius: 12px;
-  max-width: 640px;
+  max-width: 720px;
   width: 100%;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 
+.menu h1,
+.options h1,
+.result h1 {
+  margin: 0 0 16px;
+  font-size: 28px;
+  letter-spacing: 0.5px;
+}
+
+/* ---------- Buttons ---------- */
 button {
   background: var(--accent);
   color: #10263a;
@@ -39,36 +59,171 @@ button {
   border-radius: 6px;
   padding: 8px 14px;
   font-weight: 600;
+  font-size: 14px;
   cursor: pointer;
+  transition: filter 0.15s ease;
 }
 
-button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+button:hover { filter: brightness(1.08); }
+button:active { filter: brightness(0.95); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.menu-actions { display: flex; gap: 12px; margin-bottom: 16px; }
+button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
 
-.controls-help ul { padding-left: 18px; }
+/* ---------- Menu ---------- */
+.menu-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
 
-.tabs { display: flex; gap: 8px; margin-top: 16px; }
-.tabs .active { background: #fff; }
+.menu-actions button {
+  flex: 1;
+  padding: 12px 16px;
+  font-size: 16px;
+}
 
-.tab-panel { margin-top: 12px; }
-.pagination { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.controls-help {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
 
+.controls-help h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.controls-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.controls-columns h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--accent);
+}
+
+.controls-columns ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.controls-note {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.tabs button {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.tabs button.active {
+  background: var(--accent);
+  color: #10263a;
+  border-color: var(--accent);
+}
+
+.tab-panel {
+  margin-top: 12px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.tab-panel ol,
+.tab-panel ul {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.7;
+}
+
+.pagination {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+/* ---------- Options ---------- */
+.options label {
+  display: block;
+  margin-bottom: 14px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.options input,
+.options select {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: #0a1f33;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.options input:focus,
+.options select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.options-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* ---------- Game screen ---------- */
 .game-screen {
   width: 100%;
   max-width: 960px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .hud {
   display: flex;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
   font-weight: 600;
+  font-size: 15px;
+  background: var(--panel);
+  padding: 10px 14px;
+  border-radius: 8px;
 }
 
-.hud .paused { color: var(--accent); }
+.hud .hp-p1 { color: #f2e2b6; }
+.hud .hp-p2 { color: #8fd6ff; }
+.hud .paused {
+  color: var(--accent);
+  margin-left: auto;
+}
 
 .arena-host {
   width: 100%;
@@ -79,7 +234,11 @@ button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
   overflow: hidden;
 }
 
-.arena-host canvas { max-width: 100%; height: auto; }
+.arena-host canvas {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
 
 .touch-controls {
   display: grid;
@@ -87,9 +246,25 @@ button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
   gap: 8px;
 }
 
-.touch-controls button { padding: 14px; font-size: 18px; }
+.touch-controls button {
+  padding: 14px;
+  font-size: 16px;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
 
-.quit { align-self: flex-end; background: var(--danger); color: #fff; }
+.quit {
+  align-self: flex-end;
+  background: var(--danger);
+  color: #fff;
+}
 
+/* ---------- Misc ---------- */
 .error { color: var(--danger); }
-.muted { color: #9fb3c8; }
+.muted { color: var(--muted); }
+
+@media (max-width: 640px) {
+  .controls-columns { grid-template-columns: 1fr; }
+  .hud { font-size: 13px; gap: 10px; }
+}

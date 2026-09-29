@@ -13,8 +13,11 @@ export default function GameCanvas({ runConfig, onEnd, onQuit }: Props) {
   const gameRef = useRef<Game | null>(null);
   const [hud, setHud] = useState<GameSnapshot>({
     score: 0,
-    hp: 100,
-    maxHp: 100,
+    players: Array.from({ length: runConfig.players }, (_, i) => ({
+      id: (i + 1) as 1 | 2,
+      hp: 100,
+      maxHp: 100,
+    })),
     timeLeft: runConfig.sessionTime,
     running: true,
     paused: false,
@@ -34,9 +37,7 @@ export default function GameCanvas({ runConfig, onEnd, onQuit }: Props) {
     });
     gameRef.current = game;
 
-    game.init().catch((err) => {
-      console.error('Failed to init game', err);
-    });
+    game.init().catch((err) => console.error('Failed to init game', err));
 
     const interval = window.setInterval(() => {
       const g = gameRef.current;
@@ -64,7 +65,11 @@ export default function GameCanvas({ runConfig, onEnd, onQuit }: Props) {
     <div className="game-screen">
       <div className="hud" aria-live="polite">
         <span>Score: {hud.score}</span>
-        <span>HP: {hud.hp}</span>
+        {hud.players.map((p) => (
+          <span key={p.id} className={`hp hp-p${p.id}`}>
+            P{p.id} HP: {p.hp}
+          </span>
+        ))}
         <span>Time: {Math.ceil(hud.timeLeft)}s</span>
         {hud.paused && <span className="paused">PAUSED - press P to resume</span>}
       </div>
@@ -73,35 +78,35 @@ export default function GameCanvas({ runConfig, onEnd, onQuit }: Props) {
 
       <div className="touch-controls">
         <button
-          aria-label="Rotate left"
-          onPointerDown={() => dispatchKey('ArrowLeft', true)}
-          onPointerUp={() => dispatchKey('ArrowLeft', false)}
-          onPointerLeave={() => dispatchKey('ArrowLeft', false)}
+          aria-label="P1 rotate left"
+          onPointerDown={() => dispatchKey('a', true)}
+          onPointerUp={() => dispatchKey('a', false)}
+          onPointerLeave={() => dispatchKey('a', false)}
         >↺</button>
         <button
-          aria-label="Move forward"
-          onPointerDown={() => dispatchKey('ArrowUp', true)}
-          onPointerUp={() => dispatchKey('ArrowUp', false)}
-          onPointerLeave={() => dispatchKey('ArrowUp', false)}
+          aria-label="P1 move forward"
+          onPointerDown={() => dispatchKey('w', true)}
+          onPointerUp={() => dispatchKey('w', false)}
+          onPointerLeave={() => dispatchKey('w', false)}
         >▲</button>
         <button
-          aria-label="Rotate right"
-          onPointerDown={() => dispatchKey('ArrowRight', true)}
-          onPointerUp={() => dispatchKey('ArrowRight', false)}
-          onPointerLeave={() => dispatchKey('ArrowRight', false)}
+          aria-label="P1 rotate right"
+          onPointerDown={() => dispatchKey('d', true)}
+          onPointerUp={() => dispatchKey('d', false)}
+          onPointerLeave={() => dispatchKey('d', false)}
         >↻</button>
         <button
-          aria-label="Front shot"
-          onPointerDown={() => dispatchKey(' ', true)}
-          onPointerUp={() => dispatchKey(' ', false)}
+          aria-label="P1 front shot (hold to charge)"
+          onPointerDown={() => dispatchKey('2', true)}
+          onPointerUp={() => dispatchKey('2', false)}
         >Fire</button>
         <button
-          aria-label="Left shot"
+          aria-label="P1 left shot (hold to charge)"
           onPointerDown={() => dispatchKey('q', true)}
           onPointerUp={() => dispatchKey('q', false)}
         >L</button>
         <button
-          aria-label="Right shot"
+          aria-label="P1 right shot (hold to charge)"
           onPointerDown={() => dispatchKey('e', true)}
           onPointerUp={() => dispatchKey('e', false)}
         >R</button>
