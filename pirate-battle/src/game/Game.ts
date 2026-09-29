@@ -1,5 +1,7 @@
-import { Application, Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
-import { GAME_CONFIG as C, ISLANDS } from './config';
+import {
+  Application, Container, Graphics, Sprite, Text, TextStyle, Texture, TilingSprite,
+} from 'pixi.js';
+import { GAME_CONFIG as C, ISLANDS, SHIP_INDEX } from './config';
 import type {
   Enemy, Entity, GameSnapshot, Player, PlayerId,
   Projectile, Rect, RunConfig, Turret,
@@ -14,7 +16,6 @@ const HP_STYLE = new TextStyle({
   stroke: { color: 0x000000, width: 2 },
 });
 
-// Offsets relativos ao "raio" do navio para posicionar foguinhos
 const FIRE_OFFSETS = [
   { x: -0.45, y: -0.15 },
   { x:  0.45, y:  0.15 },
@@ -23,6 +24,18 @@ const FIRE_OFFSETS = [
 ];
 
 interface Scheduled { delay: number; action: () => void; done: boolean; }
+
+interface Wreck {
+  sprite: Sprite;
+  vx: number;
+  vy: number;
+  baseScale: number;
+  scaleFrom: number;
+  scaleTo: number;
+  elapsed: number;
+  maxLife: number;
+  dead: boolean;
+}
 
 export class Game {
   private app: Application;
@@ -33,22 +46,26 @@ export class Game {
   private textures: {
     explosionLarge: Texture; explosionMedium: Texture; explosionSmall: Texture;
     fireLarge: Texture; fireSmall: Texture;
-    cannonBall: Texture; ships: Texture[]; destroyedShip: Texture;
+    cannonBall: Texture; ships: Texture[];
+    tileCannonPlatform: Texture; cannon: Texture; tileWater: Texture;
   };
 
-  private players: Player[] = [];
+  private player: Player | null = null;
   private enemies: Enemy[] = [];
   private turrets: Turret[] = [];
   private projectiles: Projectile[] = [];
   private islands: Rect[] = [];
+  private wrecks: Wreck[] = [];
 
   private aimGfx = new Map<string, Graphics>();
+  private projectileAimGfx: Graphics;
   private hpTexts = new Map<string, Text>();
 
   private keys: Record<string, boolean> = {};
 
   private snapshot: GameSnapshot;
   private runConfig: RunConfig;
+  private elapsed = 0;
   private spawnAccumulator = 0;
   private destroyed = false;
   private ended = false;
@@ -67,12 +84,11 @@ export class Game {
     this.onEnd = onEnd;
     this.app = new Application();
     this.world = new Container();
+    this.projectileAimGfx = new Graphics();
 
     this.snapshot = {
       score: 0,
-      players: Array.from({ length: runConfig.players }, (_, i) => ({
-        id: (i + 1) as PlayerId, hp: C.player.hp, maxHp: C.player.hp,
-      })),
+      players: [{ id: 1, hp: C.player.hp, maxHp: C.player.hp }],
       timeLeft: runConfig.sessionTime,
       running: true, paused: false, ended: false, endReason: null,
     };
@@ -92,7 +108,9 @@ export class Game {
 
     this.drawWater();
     this.spawnIslandsAndTurrets();
-    this.spawnPlayers();
+    this.spawnPlayer();
+
+    this.world.addChild(this.projectileAimGfx);
 
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
@@ -121,7 +139,9 @@ export class Game {
 
   togglePause() {
     if (this.snapshot.ended) return;
-    this.snapshot.paused = !this.snapshot.paused;
+    const next = !this.snapshot.paused;
+    this.snapshot.paused = next;
+    if (next) this.keys = {};
   }
 
   // ---------- Input ----------
@@ -138,13 +158,20 @@ export class Game {
     if (document.hidden && !this.snapshot.ended) this.snapshot.paused = true;
   };
 
-  // ---------- World setup ----------
+  // ---------- Setup ----------
 
   private drawWater() {
-    const g = new Graphics();
-    g.rect(0, 0, C.arena.width, C.arena.height).fill('#1a4b7a');
-    g.rect(0, 0, C.arena.width, C.arena.height).stroke({ width: 4, color: '#0a2440' });
-    this.world.addChild(g);
+    const bg = new TilingSprite({
+      texture: this.textures.tileWater,
+      width: C.arena.width,
+      height: C.arena.height,
+    });
+    this.world.addChild(bg);
+
+    const border = new Graphics();
+    border.rect(0, 0, C.arena.width, C.arena.height)
+      .stroke({ width: 4, color: '#0a2440' });
+    this.world.addChild(border);
   }
 
   private spawnIslandsAndTurrets() {
@@ -157,18 +184,15 @@ export class Game {
         .fill('#c9b27a').stroke({ width: 4, color: '#6f5a2a' });
       this.world.addChild(g);
 
-      // Dois cantos opostos por ilha
       const corners = [
-        { x: isl.x,                y: isl.y },
-        { x: isl.x + isl.w,        y: isl.y + isl.h },
-        { x: isl.x + isl.w,        y: isl.y },
+        { x: isl.x,         y: isl.y         },
+        { x: isl.x + isl.w, y: isl.y + isl.h },
       ];
-      const chosen = [corners[0], corners[1]];
-      chosen.forEach((c, idx) => this.spawnTurret(i, idx, c.x, c.y));
+      corners.forEach((c, idx) => this.spawnTurret(i, idx, c.x, c.y));
     }
   }
 
-  private buildShipContainer(shipIndex: number, radius: number): { container: Container; ship: Sprite; fires: Sprite[] } {
+  private buildShipContainer(shipIndex: number, radius: number) {
     const container = new Container();
     const ship = new Sprite(this.textures.ships[shipIndex]);
     ship.anchor.set(0.5);
@@ -187,71 +211,53 @@ export class Game {
       container.addChild(fire);
       fires.push(fire);
     }
-
     return { container, ship, fires };
   }
 
-  private fitSprite(sprite: Sprite, maxSize: number) {
+  private fitSprite(sprite: Sprite, maxSize: number): number {
     const w = sprite.texture.width || 1;
     const h = sprite.texture.height || 1;
     const scale = maxSize / Math.max(w, h);
     sprite.scale.set(scale);
+    return scale;
   }
 
-  private spawnPlayers() {
-    const spawns = [
-      { x: C.arena.width / 2 - 60, y: C.arena.height - 80 },
-      { x: C.arena.width / 2 + 60, y: C.arena.height - 80 },
-    ];
+  private spawnPlayer() {
+    const spawn = { x: C.arena.width / 2, y: C.arena.height - 80 };
+    const shipIndex = this.runConfig.shipIndex;
+    const { container, ship, fires } = this.buildShipContainer(shipIndex, C.player.radius);
+    container.x = spawn.x;
+    container.y = spawn.y;
+    this.world.addChild(container);
 
-    for (let i = 0; i < this.runConfig.players; i++) {
-      const id = (i + 1) as PlayerId;
-      const shipIndex = i === 0 ? this.runConfig.shipIndex : this.pickRandomShipIndex([this.runConfig.shipIndex]);
-      const { container, ship, fires } = this.buildShipContainer(shipIndex, C.player.radius);
-      container.x = spawns[i].x;
-      container.y = spawns[i].y;
-      this.world.addChild(container);
+    this.player = {
+      id: 1, gfx: container, ship, fires,
+      x: container.x, y: container.y, radius: C.player.radius,
+      hp: C.player.hp, maxHp: C.player.hp,
+      rotation: 0,
+      frontTimer: 0, sideTimer: 0,
+      chargeFront: 0, chargeLeft: 0, chargeRight: 0,
+      alive: true, shipIndex,
+    };
 
-      this.players.push({
-        id, gfx: container, ship, fires,
-        x: container.x, y: container.y, radius: C.player.radius,
-        hp: C.player.hp, maxHp: C.player.hp,
-        rotation: 0,
-        frontTimer: 0, sideTimer: 0,
-        chargeFront: 0, chargeLeft: 0, chargeRight: 0,
-        alive: true, shipIndex,
-      });
-
-      this.ensureHpText(`player-${id}`, C.player.hp);
-      this.ensureAimGfx(`player-${id}`);
-    }
-  }
-
-  private pickRandomShipIndex(exclude: number[]): number {
-    const all = Array.from({ length: this.textures.ships.length }, (_, i) => i);
-    const pool = all.filter(i => !exclude.includes(i));
-    if (pool.length === 0) return all[0];
-    return pool[Math.floor(Math.random() * pool.length)];
-  }
-
-  private usedShipIndexes(): number[] {
-    return [
-      ...this.players.map(p => p.shipIndex),
-      ...this.enemies.map(e => e.shipIndex),
-    ];
+    this.ensureHpText('player-1', C.player.hp);
+    this.ensureAimGfx('player-1');
   }
 
   private spawnTurret(islandIndex: number, cornerIndex: number, x: number, y: number) {
     const container = new Container();
     const r = C.turret.radius;
 
-    // Canhão desenhado (não há PNG de canhão nos assets disponíveis).
-    // Base circular + cano retangular apontando para "cima" (-y).
-    const base = new Graphics();
-    base.circle(0, 0, r).fill('#3a2a1c').stroke({ width: 2, color: '#1a1108' });
-    base.rect(-4, -r - 8, 8, r + 8).fill('#5c4530').stroke({ width: 2, color: '#1a1108' });
-    base.circle(0, 0, r * 0.55).fill('#8a6b46');
-    container.addChild(base);
+    const platform = new Sprite(this.textures.tileCannonPlatform);
+    platform.anchor.set(0.5);
+    this.fitSprite(platform, r * 2.2);
+    container.addChild(platform);
+
+    const cannon = new Sprite(this.textures.cannon);
+    cannon.anchor.set(0.1, 0.5);
+    this.fitSprite(cannon, r * 1.15);
+    container.addChild(cannon);
+
     container.x = x;
     container.y = y;
     this.world.addChild(container);
@@ -260,7 +266,7 @@ export class Game {
     this.turrets.push({
       gfx: container, x, y, radius: r,
       hp: C.turret.hp, maxHp: C.turret.hp, alive: true,
-      rotation: 0,
+      aimDirection: 0,
       attackTimer: Math.random() * C.turret.attackCooldown,
       islandIndex, cornerIndex, key,
     });
@@ -271,19 +277,19 @@ export class Game {
   private spawnEnemy() {
     const kind = Math.random() < 0.55 ? 'chaser' : 'shooter';
     const spec = kind === 'chaser' ? C.chaser : C.shooter;
+    // Navios fixos: chaser = ship_9, shooter = ship_2
+    const shipIndex = kind === 'chaser' ? SHIP_INDEX.chaserShip : SHIP_INDEX.shooterShip;
 
     let x = 0, y = 0, found = false;
     for (let i = 0; i < C.spawn.maxAttempts; i++) {
       x = 40 + Math.random() * (C.arena.width - 80);
       y = 40 + Math.random() * (C.arena.height - 80);
-      if (this.minDistanceToAnyPlayer(x, y) < C.spawn.minDistanceFromPlayer) continue;
+      if (this.minDistanceToPlayer(x, y) < C.spawn.minDistanceFromPlayer) continue;
       if (this.isInsideAnyIsland(x, y, spec.radius + 10)) continue;
       found = true; break;
     }
     if (!found) return;
 
-    const excludeShips = this.usedShipIndexes();
-    const shipIndex = this.pickRandomShipIndex(excludeShips);
     const { container, ship, fires } = this.buildShipContainer(shipIndex, spec.radius);
     container.x = x; container.y = y;
     this.world.addChild(container);
@@ -294,7 +300,8 @@ export class Game {
       x, y, radius: spec.radius,
       hp: spec.hp, maxHp: spec.hp, alive: true,
       kind, rotation: 0, speed: spec.speed,
-      attackTimer: Math.random() * C.shooter.attackCooldown, // dessincroniza
+      attackTimer: Math.random() * C.shooter.attackCooldown,
+      aimDirection: 0,
       shipIndex,
     };
     this.enemies.push(enemy);
@@ -308,25 +315,26 @@ export class Game {
     owner: Projectile['owner'],
     ownerId: PlayerId | null,
     x: number, y: number,
-    rotation: number, range: number,
+    rotation: number, range: number, flightTime: number,
     damageOverride?: number,
   ) {
+    const speed = range / flightTime;
     const container = new Container();
     const ball = new Sprite(this.textures.cannonBall);
     ball.anchor.set(0.5);
-    this.fitSprite(ball, C.projectile.radius * 2.4);
+    this.fitSprite(ball, C.projectile.radius * 2.2);
     container.addChild(ball);
     container.x = x; container.y = y;
     this.world.addChild(container);
 
     this.projectiles.push({
       gfx: container, x, y,
-      vx: Math.cos(rotation) * C.projectile.speed,
-      vy: Math.sin(rotation) * C.projectile.speed,
+      vx: Math.cos(rotation) * speed,
+      vy: Math.sin(rotation) * speed,
       radius: C.projectile.radius,
       damage: damageOverride ?? (owner === 'player' ? C.projectile.damage : C.projectile.enemyDamage),
       owner, ownerId,
-      traveled: 0, range, alive: true,
+      traveled: 0, range, flightTime, alive: true,
     });
   }
 
@@ -335,12 +343,13 @@ export class Game {
     const clamped = Math.max(0, Math.min(1, charge));
     const range = C.projectile.minRange + (C.projectile.maxRange - C.projectile.minRange) * clamped;
     const baseDir = p.rotation - Math.PI / 2;
+    const muzzle = p.radius * C.player.muzzleOffset;   // bem colado no casco
 
     if (slot === 'front') {
       this.spawnProjectile('player', p.id,
-        p.x + Math.cos(baseDir) * (p.radius + 6),
-        p.y + Math.sin(baseDir) * (p.radius + 6),
-        baseDir, range);
+        p.x + Math.cos(baseDir) * muzzle,
+        p.y + Math.sin(baseDir) * muzzle,
+        baseDir, range, C.projectile.playerFlightTime);
     } else {
       const side = slot === 'left' ? -1 : 1;
       const dir = baseDir + side * (Math.PI / 2);
@@ -349,9 +358,9 @@ export class Game {
       for (let i = -1; i <= 1; i++) {
         const perpX = Math.cos(p.rotation);
         const perpY = Math.sin(p.rotation);
-        const ox = sideX * (p.radius + 6) + perpX * i * 10;
-        const oy = sideY * (p.radius + 6) + perpY * i * 10;
-        this.spawnProjectile('player', p.id, p.x + ox, p.y + oy, dir, range);
+        const ox = sideX * muzzle + perpX * i * 10;
+        const oy = sideY * muzzle + perpY * i * 10;
+        this.spawnProjectile('player', p.id, p.x + ox, p.y + oy, dir, range, C.projectile.playerFlightTime);
       }
     }
   }
@@ -363,6 +372,8 @@ export class Game {
     if (!this.snapshot.running || this.snapshot.paused) return;
 
     const dt = this.app.ticker.deltaMS / 1000;
+    this.elapsed += dt;
+
     this.snapshot.timeLeft -= dt;
     if (this.snapshot.timeLeft <= 0) {
       this.snapshot.timeLeft = 0;
@@ -371,10 +382,11 @@ export class Game {
     }
 
     this.updateScheduled(dt);
-    for (const p of this.players) this.updatePlayer(p, dt);
+    if (this.player) this.updatePlayer(this.player, dt);
     this.updateEnemies(dt);
     this.updateTurrets(dt);
     this.updateProjectiles(dt);
+    this.updateWrecks(dt);
     this.updateSpawns(dt);
     this.updateShipFiresAll();
     this.updateAimPreviews();
@@ -397,10 +409,10 @@ export class Game {
     if (!p.alive) return;
     const k = this.keys;
 
-    const left  = p.id === 1 ? k['a'] || k['A'] : k['j'] || k['J'];
-    const right = p.id === 1 ? k['d'] || k['D'] : k['l'] || k['L'];
-    const fwd   = p.id === 1 ? k['w'] || k['W'] : k['i'] || k['I'];
-    const back  = p.id === 1 ? k['s'] || k['S'] : k['k'] || k['K'];
+    const left  = k['a'] || k['A'];
+    const right = k['d'] || k['D'];
+    const fwd   = k['w'] || k['W'];
+    const back  = k['s'] || k['S'];
 
     if (left)  p.rotation -= C.player.rotationSpeed * dt;
     if (right) p.rotation += C.player.rotationSpeed * dt;
@@ -422,9 +434,9 @@ export class Game {
     p.frontTimer -= dt;
     p.sideTimer -= dt;
 
-    const frontKey = p.id === 1 ? k['2'] : k['9'];
-    const leftKey  = p.id === 1 ? k['q'] || k['Q'] : k['u'] || k['U'];
-    const rightKey = p.id === 1 ? k['e'] || k['E'] : k['o'] || k['O'];
+    const frontKey = k['2'];
+    const leftKey  = k['q'] || k['Q'];
+    const rightKey = k['e'] || k['E'];
     const chargeStep = dt / C.charge.maxTime;
 
     if (frontKey) p.chargeFront = Math.min(1, p.chargeFront + chargeStep);
@@ -449,32 +461,35 @@ export class Game {
   private updateEnemies(dt: number) {
     for (const e of this.enemies) {
       if (!e.alive) continue;
-      const target = this.nearestPlayer(e.x, e.y);
-      if (!target) continue;
+      const target = this.player && this.player.alive ? this.player : null;
 
-      const dx = target.x - e.x;
-      const dy = target.y - e.y;
-      const dist = Math.hypot(dx, dy) || 1;
-      e.rotation = Math.atan2(dy, dx) + Math.PI / 2;
+      if (target) {
+        const dx = target.x - e.x;
+        const dy = target.y - e.y;
+        const dist = Math.hypot(dx, dy) || 1;
 
-      if (e.kind === 'chaser') {
-        e.x += (dx / dist) * e.speed * dt;
-        e.y += (dy / dist) * e.speed * dt;
-      } else {
-        if (dist > C.shooter.attackRange * 0.8) {
+        if (e.kind === 'chaser') {
+          e.aimDirection = Math.atan2(dy, dx);
           e.x += (dx / dist) * e.speed * dt;
           e.y += (dy / dist) * e.speed * dt;
-        }
-        e.attackTimer -= dt;
-        if (dist <= C.shooter.attackRange && e.attackTimer <= 0) {
-          e.attackTimer = C.shooter.attackCooldown + Math.random() * C.shooter.cooldownJitter;
-          // Tiro também "carregado": usa alcance máximo variando levemente
-          const range = C.projectile.minRange + Math.random() * (C.shooter.projectileRange - C.projectile.minRange);
-          const dir = Math.atan2(dy, dx);
-          this.spawnProjectile('enemy', null,
-            e.x + Math.cos(dir) * (e.radius + 6),
-            e.y + Math.sin(dir) * (e.radius + 6),
-            dir, range);
+        } else {
+          if (dist > C.shooter.attackRange * 0.8) {
+            e.x += (dx / dist) * e.speed * dt;
+            e.y += (dy / dist) * e.speed * dt;
+          }
+          e.attackTimer -= dt;
+
+          if (e.attackTimer > C.shooter.aimDuration) {
+            e.aimDirection = Math.atan2(dy, dx);
+          }
+
+          if (dist <= C.shooter.attackRange && e.attackTimer <= 0) {
+            e.attackTimer = C.shooter.attackCooldown + Math.random() * C.shooter.cooldownJitter;
+            this.spawnProjectile('enemy', null,
+              e.x + Math.cos(e.aimDirection) * (e.radius + 4),
+              e.y + Math.sin(e.aimDirection) * (e.radius + 4),
+              e.aimDirection, C.shooter.projectileRange, C.projectile.enemyFlightTime);
+          }
         }
       }
 
@@ -482,30 +497,44 @@ export class Game {
       e.y = Math.max(e.radius, Math.min(C.arena.height - e.radius, e.y));
       this.resolveIslandCollisionEntity(e);
 
-      e.gfx.x = e.x; e.gfx.y = e.y;
-      e.gfx.rotation = e.rotation; // já somamos PI/2 acima
+      if (e.kind === 'chaser' && target) {
+        if (Math.hypot(e.x - target.x, e.y - target.y) < e.radius + target.radius) {
+          this.spawnExplosion(e.x, e.y, 'small');
+          this.destroyEnemy(e, false);
+          this.damagePlayer(target, C.chaser.contactDamage);
+        }
+      }
+
+      if (e.alive) {
+        e.gfx.x = e.x; e.gfx.y = e.y;
+        e.gfx.rotation = e.aimDirection + Math.PI / 2;
+      }
     }
   }
 
   private updateTurrets(dt: number) {
     for (const t of this.turrets) {
       if (!t.alive) continue;
-      const target = this.nearestPlayer(t.x, t.y);
+      const target = this.player && this.player.alive ? this.player : null;
       if (!target) continue;
       const dx = target.x - t.x;
       const dy = target.y - t.y;
       const dist = Math.hypot(dx, dy) || 1;
-      t.rotation = Math.atan2(dy, dx);
-      t.gfx.rotation = t.rotation + Math.PI / 2;
 
       t.attackTimer -= dt;
+
+      if (t.attackTimer > C.turret.aimDuration) {
+        t.aimDirection = Math.atan2(dy, dx);
+      }
+      t.gfx.rotation = t.aimDirection;
+
       if (dist <= C.turret.range && t.attackTimer <= 0) {
         t.attackTimer = C.turret.attackCooldown + Math.random() * C.turret.cooldownJitter;
-        const range = C.projectile.minRange + Math.random() * (C.turret.projectileRange - C.projectile.minRange);
         this.spawnProjectile('enemy', null,
-          t.x + Math.cos(t.rotation) * (t.radius + 6),
-          t.y + Math.sin(t.rotation) * (t.radius + 6),
-          t.rotation, range, C.turret.projectileDamage);
+          t.x + Math.cos(t.aimDirection) * (t.radius + 4),
+          t.y + Math.sin(t.aimDirection) * (t.radius + 4),
+          t.aimDirection, C.turret.projectileRange, C.projectile.enemyFlightTime,
+          C.turret.projectileDamage);
       }
     }
   }
@@ -521,13 +550,10 @@ export class Game {
       p.gfx.x = p.x;
       p.gfx.y = p.y;
 
-      // Arco visual
       const t = Math.max(0, Math.min(1, p.traveled / p.range));
       const arc = Math.sin(t * Math.PI);
-      const s = 1 + arc * C.projectile.arcScale;
-      p.gfx.scale.set(s);
+      p.gfx.scale.set(1 + arc * C.projectile.arcScale);
 
-      // Aterrissou (range esgotado): resolve colisão UMA vez no ponto de queda
       if (p.traveled >= p.range) {
         this.onProjectileLand(p);
         p.alive = false;
@@ -535,12 +561,10 @@ export class Game {
         continue;
       }
 
-      // Saiu muito longe da arena (segurança)
       if (p.x < -80 || p.y < -80 || p.x > C.arena.width + 80 || p.y > C.arena.height + 80) {
         p.alive = false;
         p.gfx.destroy();
       }
-      // Projéteis passam POR CIMA das ilhas — nenhum teste com islands.
     }
     this.projectiles = this.projectiles.filter(p => p.alive);
   }
@@ -549,41 +573,56 @@ export class Game {
     const r = C.projectile.landingRadius;
 
     if (p.owner === 'player') {
-      // 1) inimigos
       for (const e of this.enemies) {
         if (!e.alive) continue;
         if (Math.hypot(p.x - e.x, p.y - e.y) <= e.radius + r) {
-          this.damageEnemy(e, p.damage);
           this.spawnExplosion(p.x, p.y, 'small');
+          this.damageEnemy(e, p.damage);
           return;
         }
       }
-      // 2) torretas
       for (const t of this.turrets) {
         if (!t.alive) continue;
         if (Math.hypot(p.x - t.x, p.y - t.y) <= t.radius + r) {
-          this.damageTurret(t, p.damage);
           this.spawnExplosion(p.x, p.y, 'small');
+          this.damageTurret(t, p.damage);
           return;
         }
       }
-      // Caiu no mar / na areia — sem dano.
     } else {
-      // Tiro inimigo: só conta se cair SOBRE o jogador
-      for (const pl of this.players) {
-        if (!pl.alive) continue;
-        if (Math.hypot(p.x - pl.x, p.y - pl.y) <= pl.radius + r) {
-          this.damagePlayer(pl, p.damage);
-          this.spawnExplosion(p.x, p.y, 'small');
-          return;
-        }
+      const pl = this.player;
+      if (pl && pl.alive && Math.hypot(p.x - pl.x, p.y - pl.y) <= pl.radius + r) {
+        this.spawnExplosion(p.x, p.y, 'small');
+        this.damagePlayer(pl, p.damage);
       }
     }
   }
 
+  private updateWrecks(dt: number) {
+    for (const w of this.wrecks) {
+      if (w.dead) continue;
+      w.elapsed += dt;
+      const t = Math.min(1, w.elapsed / w.maxLife);
+      w.sprite.x += w.vx * dt;
+      w.sprite.y += w.vy * dt;
+      const s = w.baseScale * (w.scaleFrom + (w.scaleTo - w.scaleFrom) * t);
+      w.sprite.scale.set(s);
+      w.sprite.alpha = 1 - t * 0.65;
+      if (t >= 1) {
+        w.dead = true;
+        w.sprite.destroy();
+      }
+    }
+    this.wrecks = this.wrecks.filter(w => !w.dead);
+  }
+
   private updateSpawns(dt: number) {
+    const interval = Math.max(
+      C.spawn.minInterval,
+      C.spawn.baseInterval - this.elapsed * C.spawn.accelPerSec
+    );
     this.spawnAccumulator += dt;
-    if (this.spawnAccumulator >= this.runConfig.spawnInterval) {
+    if (this.spawnAccumulator >= interval) {
       this.spawnAccumulator = 0;
       this.spawnEnemy();
     }
@@ -594,9 +633,8 @@ export class Game {
   private damageEnemy(e: Enemy, dmg: number) {
     e.hp = Math.max(0, e.hp - dmg);
     if (e.hp <= 0 && e.alive) {
-      e.alive = false;
       this.snapshot.score += 1;
-      this.destroyEnemy(e);
+      this.destroyEnemy(e, true);
     }
   }
 
@@ -605,9 +643,8 @@ export class Game {
     if (t.hp <= 0 && t.alive) {
       t.alive = false;
       this.snapshot.score += 1;
-      const key = t.key;
-      this.hpTexts.get(key)?.destroy(); this.hpTexts.delete(key);
-      this.aimGfx.get(key)?.destroy(); this.aimGfx.delete(key);
+      this.hpTexts.get(t.key)?.destroy(); this.hpTexts.delete(t.key);
+      this.aimGfx.get(t.key)?.destroy(); this.aimGfx.delete(t.key);
       t.gfx.destroy();
     }
   }
@@ -620,32 +657,44 @@ export class Game {
       p.alive = false;
       p.ship.alpha = 0.25;
       p.fires.forEach(f => f.visible = false);
+      this.end('death');
     }
-    if (this.players.every(pl => !pl.alive)) this.end('death');
   }
 
-  private destroyEnemy(e: Enemy) {
-    const key = e.key;
-    this.hpTexts.get(key)?.destroy(); this.hpTexts.delete(key);
-    this.aimGfx.get(key)?.destroy(); this.aimGfx.delete(key);
+  /**
+   * Destrói inimigo. Se `byPlayer`, dispara a sequência:
+   * explosão média → explosão grande → naufrágio (1s, afundando) → some.
+   */
+  private destroyEnemy(e: Enemy, byPlayer: boolean) {
+    if (!e.alive) return;
+    e.alive = false;
+
+    this.hpTexts.get(e.key)?.destroy(); this.hpTexts.delete(e.key);
+    this.aimGfx.get(e.key)?.destroy(); this.aimGfx.delete(e.key);
 
     const { x, y } = e;
-    const rot = e.rotation;
+    const finalRotation = e.gfx.rotation;
     const baseSize = e.radius * 3.2;
 
-    // Some o navio original
+    // Texturas específicas por tipo
+    const wreckIndex = e.kind === 'chaser' ? SHIP_INDEX.chaserWreck : SHIP_INDEX.shooterWreck;
+
     e.ship.destroy();
     e.fires.forEach(f => f.destroy());
     e.gfx.destroy();
 
+    if (!byPlayer) return;
+
     // Explosão média
     const med = new Sprite(this.textures.explosionMedium);
-    med.anchor.set(0.5); med.x = x; med.y = y; med.rotation = rot;
+    med.anchor.set(0.5); med.x = x; med.y = y;
     this.fitSprite(med, baseSize);
     this.world.addChild(med);
 
     this.schedule(C.destruction.mediumExplosionDuration, () => {
       med.destroy();
+
+      // Explosão grande
       const lg = new Sprite(this.textures.explosionLarge);
       lg.anchor.set(0.5); lg.x = x; lg.y = y;
       this.fitSprite(lg, baseSize * 1.4);
@@ -653,12 +702,26 @@ export class Game {
 
       this.schedule(C.destruction.largeExplosionDuration, () => {
         lg.destroy();
-        const wreck = new Sprite(this.textures.destroyedShip);
-        wreck.anchor.set(0.5); wreck.x = x; wreck.y = y; wreck.rotation = rot;
-        this.fitSprite(wreck, baseSize);
+
+        // Navio afundando (drift leve p/ direita+baixo, encolhe, esmaece)
+        const wreck = new Sprite(this.textures.ships[wreckIndex]);
+        wreck.anchor.set(0.5);
+        wreck.x = x; wreck.y = y;
+        wreck.rotation = finalRotation;
+        const baseScale = this.fitSprite(wreck, baseSize);
         this.world.addChild(wreck);
 
-        this.schedule(C.destruction.wreckDuration, () => wreck.destroy());
+        this.wrecks.push({
+          sprite: wreck,
+          vx: C.destruction.wreckDriftX,
+          vy: C.destruction.wreckDriftY,
+          baseScale,
+          scaleFrom: 1,
+          scaleTo: C.destruction.wreckScaleTo,
+          elapsed: 0,
+          maxLife: C.destruction.wreckDuration,
+          dead: false,
+        });
       });
     });
   }
@@ -669,7 +732,7 @@ export class Game {
              : this.textures.explosionLarge;
     const sprite = new Sprite(tex);
     sprite.anchor.set(0.5); sprite.x = x; sprite.y = y;
-    this.fitSprite(sprite, 48);
+    this.fitSprite(sprite, 40);
     this.world.addChild(sprite);
     const life = kind === 'small' ? 0.18 : kind === 'medium' ? 0.25 : 0.35;
     this.schedule(life, () => sprite.destroy());
@@ -678,7 +741,7 @@ export class Game {
   // ---------- Fires by HP ----------
 
   private updateShipFiresAll() {
-    for (const p of this.players) this.updateShipFires(p);
+    if (this.player) this.updateShipFires(this.player);
     for (const e of this.enemies) this.updateShipFires(e);
   }
 
@@ -712,12 +775,14 @@ export class Game {
   }
 
   private updateHpTexts() {
-    for (const p of this.players) {
-      const t = this.hpTexts.get(`player-${p.id}`);
-      if (!t) continue;
-      t.text = `${p.hp}`;
-      t.x = p.x; t.y = p.y - p.radius - 12;
-      t.visible = p.alive;
+    if (this.player) {
+      const p = this.player;
+      const t = this.hpTexts.get('player-1');
+      if (t) {
+        t.text = `${p.hp}`;
+        t.x = p.x; t.y = p.y - p.radius - 12;
+        t.visible = p.alive;
+      }
     }
     for (const e of this.enemies) {
       const t = this.hpTexts.get(e.key);
@@ -734,83 +799,97 @@ export class Game {
     }
   }
 
+  private projectileLandingPoint(p: Projectile): { x: number; y: number } {
+    const speed = Math.hypot(p.vx, p.vy) || 1;
+    const remaining = Math.max(0, (p.range - p.traveled) / speed);
+    return { x: p.x + p.vx * remaining, y: p.y + p.vy * remaining };
+  }
+
   private updateAimPreviews() {
-    for (const p of this.players) {
-      const g = this.aimGfx.get(`player-${p.id}`);
-      if (!g) continue;
-      g.clear();
+    // Marcadores de pouso dos projéteis em voo — ficam no ponto exato onde a bola cai
+    this.projectileAimGfx.clear();
+    for (const p of this.projectiles) {
       if (!p.alive) continue;
-      const baseDir = p.rotation - Math.PI / 2;
-      if (p.chargeFront > 0) {
-        const range = C.projectile.minRange + (C.projectile.maxRange - C.projectile.minRange) * Math.min(1, p.chargeFront);
-        this.drawAimLine(g, p.x, p.y, baseDir, range, C.aim.lineColor);
-      }
-      if (p.chargeLeft > 0) {
-        const range = C.projectile.minRange + (C.projectile.maxRange - C.projectile.minRange) * Math.min(1, p.chargeLeft);
-        this.drawAimLine(g, p.x, p.y, baseDir - Math.PI / 2, range, C.aim.lineColor);
-      }
-      if (p.chargeRight > 0) {
-        const range = C.projectile.minRange + (C.projectile.maxRange - C.projectile.minRange) * Math.min(1, p.chargeRight);
-        this.drawAimLine(g, p.x, p.y, baseDir + Math.PI / 2, range, C.aim.lineColor);
+      const { x, y } = this.projectileLandingPoint(p);
+      const color = p.owner === 'player' ? C.aim.lineColor : C.aim.lineColorEnemy;
+      this.drawAimMarker(this.projectileAimGfx, x, y, color);
+    }
+
+    // Mira do player durante o charge
+    if (this.player) {
+      const p = this.player;
+      const g = this.aimGfx.get('player-1');
+      if (g) {
+        g.clear();
+        if (p.alive) {
+          const baseDir = p.rotation - Math.PI / 2;
+          if (p.chargeFront > 0) {
+            const range = C.projectile.minRange + (C.projectile.maxRange - C.projectile.minRange) * Math.min(1, p.chargeFront);
+            this.drawAimMarker(g, p.x + Math.cos(baseDir) * range, p.y + Math.sin(baseDir) * range, C.aim.lineColor);
+          }
+          if (p.chargeLeft > 0) {
+            const range = C.projectile.minRange + (C.projectile.maxRange - C.projectile.minRange) * Math.min(1, p.chargeLeft);
+            const d = baseDir - Math.PI / 2;
+            this.drawAimMarker(g, p.x + Math.cos(d) * range, p.y + Math.sin(d) * range, C.aim.lineColor);
+          }
+          if (p.chargeRight > 0) {
+            const range = C.projectile.minRange + (C.projectile.maxRange - C.projectile.minRange) * Math.min(1, p.chargeRight);
+            const d = baseDir + Math.PI / 2;
+            this.drawAimMarker(g, p.x + Math.cos(d) * range, p.y + Math.sin(d) * range, C.aim.lineColor);
+          }
+        }
       }
     }
+
+    // Mira dos shooters (vermelho vivo)
     for (const e of this.enemies) {
       const g = this.aimGfx.get(e.key);
       if (!g) continue;
       g.clear();
       if (!e.alive || e.kind !== 'shooter') continue;
-      const target = this.nearestPlayer(e.x, e.y);
+      const target = this.player && this.player.alive ? this.player : null;
       if (!target) continue;
       const dist = Math.hypot(target.x - e.x, target.y - e.y);
       if (dist > C.shooter.attackRange) continue;
-      const rot = Math.atan2(target.y - e.y, target.x - e.x);
-      this.drawAimLine(g, e.x, e.y, rot, C.shooter.projectileRange, C.aim.lineColorEnemy);
+      if (e.attackTimer > C.shooter.aimDuration || e.attackTimer <= 0) continue;
+      const progress = 1 - e.attackTimer / C.shooter.aimDuration;
+      const range = C.shooter.projectileRange * progress;
+      this.drawAimMarker(g,
+        e.x + Math.cos(e.aimDirection) * range,
+        e.y + Math.sin(e.aimDirection) * range,
+        C.aim.lineColorEnemy);
     }
+
+    // Mira das torretas (vermelho vivo)
     for (const t of this.turrets) {
       const g = this.aimGfx.get(t.key);
       if (!g) continue;
       g.clear();
       if (!t.alive) continue;
-      const target = this.nearestPlayer(t.x, t.y);
+      const target = this.player && this.player.alive ? this.player : null;
       if (!target) continue;
       const dist = Math.hypot(target.x - t.x, target.y - t.y);
       if (dist > C.turret.range) continue;
-      const rot = Math.atan2(target.y - t.y, target.x - t.x);
-      this.drawAimLine(g, t.x, t.y, rot, C.turret.projectileRange, C.aim.lineColorEnemy);
+      if (t.attackTimer > C.turret.aimDuration || t.attackTimer <= 0) continue;
+      const progress = 1 - t.attackTimer / C.turret.aimDuration;
+      const range = C.turret.projectileRange * progress;
+      this.drawAimMarker(g,
+        t.x + Math.cos(t.aimDirection) * range,
+        t.y + Math.sin(t.aimDirection) * range,
+        C.aim.lineColorEnemy);
     }
   }
 
-  private drawAimLine(g: Graphics, x: number, y: number, rotation: number, range: number, color: number) {
-    const dx = Math.cos(rotation), dy = Math.sin(rotation);
-    const dots = Math.min(C.aim.maxDots, Math.max(3, Math.floor(range / C.aim.dotSpacing)));
-    for (let i = 1; i <= dots; i++) {
-      const t = i / dots;
-      g.circle(x + dx * range * t, y + dy * range * t, 2).fill({ color, alpha: 0.55 });
-    }
-    g.circle(x + dx * range, y + dy * range, C.aim.targetCircleRadius)
-      .stroke({ width: 2, color, alpha: 0.9 });
+  private drawAimMarker(g: Graphics, x: number, y: number, color: number) {
+    g.circle(x, y, C.aim.markerRadius).stroke({ width: 2, color, alpha: 0.95 });
+    g.circle(x, y, 2).fill({ color, alpha: 1 });
   }
 
   // ---------- Helpers ----------
 
-  private minDistanceToAnyPlayer(x: number, y: number): number {
-    let min = Infinity;
-    for (const p of this.players) {
-      if (!p.alive) continue;
-      const d = Math.hypot(x - p.x, y - p.y);
-      if (d < min) min = d;
-    }
-    return min === Infinity ? 0 : min;
-  }
-
-  private nearestPlayer(x: number, y: number): Player | null {
-    let best: Player | null = null; let bestD = Infinity;
-    for (const p of this.players) {
-      if (!p.alive) continue;
-      const d = Math.hypot(x - p.x, y - p.y);
-      if (d < bestD) { bestD = d; best = p; }
-    }
-    return best;
+  private minDistanceToPlayer(x: number, y: number): number {
+    if (!this.player || !this.player.alive) return 0;
+    return Math.hypot(x - this.player.x, y - this.player.y);
   }
 
   private resolveIslandCollisionEntity(e: { x: number; y: number; radius: number }) {

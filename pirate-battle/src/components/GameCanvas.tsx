@@ -20,14 +20,11 @@ export default function GameCanvas({ runConfig, onEnd, onQuit }: Props) {
 
   const [hud, setHud] = useState<GameSnapshot>({
     score: 0,
-    players: Array.from({ length: runConfig.players }, (_, i) => ({
-      id: (i + 1) as 1 | 2, hp: 100, maxHp: 100,
-    })),
+    players: [{ id: 1, hp: 100, maxHp: 100 }],
     timeLeft: runConfig.sessionTime,
     running: true, paused: false, ended: false, endReason: null,
   });
 
-  // 1) Carrega texturas
   useEffect(() => {
     let cancelled = false;
     setLoadError(null);
@@ -40,7 +37,6 @@ export default function GameCanvas({ runConfig, onEnd, onQuit }: Props) {
     return () => { cancelled = true; };
   }, []);
 
-  // 2) Instancia o Game
   useEffect(() => {
     if (!hostRef.current || !textures) return;
     let cancelled = false;
@@ -99,7 +95,7 @@ export default function GameCanvas({ runConfig, onEnd, onQuit }: Props) {
       <div className="hud" aria-live="polite">
         <span>Score: {hud.score}</span>
         {hud.players.map((p) => (
-          <span key={p.id} className={`hp hp-p${p.id}`}>P{p.id} HP: {p.hp}</span>
+          <span key={p.id} className={`hp hp-p${p.id}`}>HP: {p.hp}</span>
         ))}
         <span>Time: {Math.ceil(hud.timeLeft)}s</span>
         {hud.paused && <span className="paused">PAUSED - press P to resume</span>}

@@ -20,28 +20,14 @@ export default function MainMenu({ onPlay, onOptions }: Props) {
 
       <section className="controls-help">
         <h2>Controls</h2>
-        <div className="controls-columns">
-          <div>
-            <h3>Player 1</h3>
-            <ul>
-              <li><b>W</b>: forward</li>
-              <li><b>A</b> / <b>D</b>: rotate</li>
-              <li><b>2</b> (hold): front shot</li>
-              <li><b>Q</b> (hold): left shot</li>
-              <li><b>E</b> (hold): right shot</li>
-            </ul>
-          </div>
-          <div>
-            <h3>Player 2</h3>
-            <ul>
-              <li><b>I</b>: forward</li>
-              <li><b>J</b> / <b>L</b>: rotate</li>
-              <li><b>9</b> (hold): front shot</li>
-              <li><b>U</b> (hold): left shot</li>
-              <li><b>O</b> (hold): right shot</li>
-            </ul>
-          </div>
-        </div>
+        <ul>
+          <li><b>W</b>: forward</li>
+          <li><b>S</b>: backward</li>
+          <li><b>A</b> / <b>D</b>: rotate</li>
+          <li><b>2</b> (hold): front shot</li>
+          <li><b>Q</b> (hold): left shot</li>
+          <li><b>E</b> (hold): right shot</li>
+        </ul>
         <p className="controls-note">
           Hold the shot key to increase range. Release to fire. <b>P</b> or <b>Esc</b> pauses.
         </p>

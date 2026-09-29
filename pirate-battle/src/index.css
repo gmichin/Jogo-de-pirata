@@ -206,30 +206,21 @@ button:focus-visible {
   display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
   font-weight: 600; font-size: 15px;
   background: var(--panel); padding: 10px 14px;
-  border-radius: 0;
 }
-.hud .quit-inline {
-  margin-left: auto;
-  background: var(--danger); color: #fff;
-}
+.hud .quit-inline { margin-left: auto; background: var(--danger); color: #fff; }
 .arena-host {
   flex: 1; min-height: 0;
   display: flex; align-items: center; justify-content: center;
   overflow: hidden;
 }
-.arena-host canvas {
-  max-width: 100%; max-height: 100%;
-  height: auto; width: auto;
-  display: block;
-}
-.loading-screen {
-  align-items: center; justify-content: center; gap: 16px;
-}
-.loading-screen .progress {
-  width: 260px; height: 8px; background: #143050; border-radius: 4px; overflow: hidden;
-}
-.loading-screen .progress > div {
-  height: 100%; background: var(--accent); transition: width 0.15s ease;
+.arena-host canvas { max-width: 100%; max-height: 100%; display: block; }
+
+.loading-screen { align-items: center; justify-content: center; gap: 16px; }
+.loading-screen .progress { width: 260px; height: 8px; background: #143050; border-radius: 4px; overflow: hidden; }
+.loading-screen .progress > div { height: 100%; background: var(--accent); transition: width 0.15s ease; }
+
+@media (max-width: 640px) {
+  .ship-grid { grid-template-columns: repeat(4, 1fr); }
 }
 
 /* ---------- Ship picker ---------- */

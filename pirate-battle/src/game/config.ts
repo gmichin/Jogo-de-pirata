@@ -2,60 +2,62 @@ export const GAME_CONFIG = {
   arena: { width: 900, height: 600 },
 
   player: {
-    radius: 22,
+    radius: 27.5,
     speed: 140,
     rotationSpeed: 2.6,
     hp: 100,
     frontCooldown: 0.25,
     sideCooldown: 0.6,
+    muzzleOffset: 0.25,      // antes 0.6 → tiro nasce mais colado
   },
 
   projectile: {
-    radius: 5,
-    speed: 340,
+    radius: 3,
     damage: 12,
     enemyDamage: 10,
+    playerFlightTime: 0.85,
+    enemyFlightTime: 2.2,
     arcScale: 0.9,
-    minRange: 80,
+    minRange: 35,            // antes 80 → mira começa perto do navio
     maxRange: 380,
-    // Radius of the "landing" hit test — must land on/near the target
-    landingRadius: 12,
+    landingRadius: 10,
   },
 
-  charge: {
-    // Seconds to reach full charge
-    maxTime: 1.0,
-  },
+  charge: { maxTime: 1.0 },
 
   chaser: {
-    radius: 18,
-    hp: 20,
-    speed: 80,
+    radius: 22.5,
+    hp: 12,
+    speed: 60,
     contactDamage: 25,
   },
 
   shooter: {
-    radius: 18,
-    hp: 30,
-    speed: 55,
+    radius: 22.5,
+    hp: 36,
+    speed: 45,
     attackRange: 280,
-    attackCooldown: 1.0,      // fixo, 1s
-    cooldownJitter: 0.15,     // dessincroniza
+    attackCooldown: 2.0,
+    cooldownJitter: 0.25,
+    aimDuration: 1.0,
     projectileRange: 300,
   },
 
   turret: {
-    radius: 14,
-    hp: 40,
+    radius: 22.5,
+    hp: 24,
     range: 320,
-    attackCooldown: 1.0,
-    cooldownJitter: 0.2,
-    projectileDamage: 12,
+    attackCooldown: 2.0,
+    cooldownJitter: 0.25,
+    aimDuration: 1.0,
+    projectileDamage: 5,
     projectileRange: 320,
   },
 
   spawn: {
-    defaultInterval: 3.0,
+    baseInterval: 4.0,
+    minInterval: 2.0,
+    accelPerSec: 0.02,
     minDistanceFromPlayer: 220,
     maxAttempts: 12,
   },
@@ -67,14 +69,11 @@ export const GAME_CONFIG = {
   },
 
   aim: {
-    lineColor: 0xfff6b0,
-    lineColorEnemy: 0xff9a6b,
-    maxDots: 12,
-    dotSpacing: 18,
-    targetCircleRadius: 8,
+    lineColor: 0xffe400,        // amarelo vivo (player)
+    lineColorEnemy: 0xff2020,   // vermelho bem vivo (inimigos)
+    markerRadius: 11,
   },
 
-  // HP-ratio thresholds for fire overlays (fires appear below the threshold)
   damageStates: [
     { maxHpRatio: 0.5,  fires: 1 },
     { maxHpRatio: 0.25, fires: 2 },
@@ -84,7 +83,10 @@ export const GAME_CONFIG = {
   destruction: {
     mediumExplosionDuration: 0.18,
     largeExplosionDuration: 0.28,
-    wreckDuration: 0.5,
+    wreckDuration: 1.0,        // 1s de naufrágio
+    wreckDriftX: 14,           // px/s para a direita
+    wreckDriftY: 9,            // px/s para baixo
+    wreckScaleTo: 0.7,         // encolhe até 70%
   },
 } as const;
 
@@ -95,3 +97,11 @@ export const ISLANDS = [
 ] as const;
 
 export const SHIP_COUNT = 24;
+
+// Índices 0-based das imagens que você indicou
+export const SHIP_INDEX = {
+  chaserShip:   8,   // ships/ship_9.png
+  chaserWreck:  20,  // ships/ship_21.png
+  shooterShip:  1,   // ships/ship_2.png
+  shooterWreck: 19,  // ships/ship_20.png
+} as const;

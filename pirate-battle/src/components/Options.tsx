@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { GAME_CONFIG } from '../game/config';
-import { SHIP_COUNT } from '../game/config';
+import { GAME_CONFIG, SHIP_COUNT } from '../game/config';
 import type { RunConfig } from '../game/types';
 import { saveOptions } from '../storage';
 
@@ -13,7 +12,6 @@ interface Props {
 export default function Options({ initial, onSave, onCancel }: Props) {
   const [sessionTime, setSessionTime] = useState(initial.sessionTime);
   const [spawnInterval, setSpawnInterval] = useState(initial.spawnInterval);
-  const [players, setPlayers] = useState<1 | 2>(initial.players);
   const [shipIndex, setShipIndex] = useState(initial.shipIndex);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,7 +21,7 @@ export default function Options({ initial, onSave, onCancel }: Props) {
       return;
     }
     if (spawnInterval <= 0) { setError('Spawn interval must be greater than zero.'); return; }
-    const cfg: RunConfig = { sessionTime, spawnInterval, players, shipIndex };
+    const cfg: RunConfig = { sessionTime, spawnInterval, shipIndex };
     saveOptions(cfg);
     onSave(cfg);
   };
@@ -42,17 +40,9 @@ export default function Options({ initial, onSave, onCancel }: Props) {
       </label>
 
       <label>
-        Enemy spawn time (s)
+        Initial enemy spawn time (s)
         <input type="number" min={0.5} step={0.5} value={spawnInterval}
           onChange={(e) => setSpawnInterval(Number(e.target.value))} />
-      </label>
-
-      <label>
-        Players
-        <select value={players} onChange={(e) => setPlayers(Number(e.target.value) as 1 | 2)}>
-          <option value={1}>1 Player</option>
-          <option value={2}>2 Players (Co-op)</option>
-        </select>
       </label>
 
       <fieldset className="ship-picker">
@@ -65,7 +55,7 @@ export default function Options({ initial, onSave, onCancel }: Props) {
               aria-label={`Ship ${i + 1}`}
               aria-pressed={shipIndex === i}
               onClick={() => setShipIndex(i)}>
-              <img src={`/assets/png/default/ship_${i + 1}.png`} alt="" />
+              <img src={`/assets/png/default/ships/ship_${i + 1}.png`} alt="" />
             </button>
           ))}
         </div>

@@ -7,8 +7,7 @@ const LAST_KEY = 'pirate-battle:last-result';
 export function loadOptions(): RunConfig {
   const fallback: RunConfig = {
     sessionTime: GAME_CONFIG.session.defaultDuration,
-    spawnInterval: GAME_CONFIG.spawn.defaultInterval,
-    players: 1,
+    spawnInterval: GAME_CONFIG.spawn.baseInterval,
     shipIndex: 0,
   };
   try {
@@ -16,13 +15,17 @@ export function loadOptions(): RunConfig {
     if (!raw) return fallback;
     const parsed = JSON.parse(raw);
     return {
-      sessionTime: clamp(Number(parsed.sessionTime) || fallback.sessionTime,
-        GAME_CONFIG.session.minDuration, GAME_CONFIG.session.maxDuration),
+      sessionTime: clamp(
+        Number(parsed.sessionTime) || fallback.sessionTime,
+        GAME_CONFIG.session.minDuration,
+        GAME_CONFIG.session.maxDuration
+      ),
       spawnInterval: Math.max(0.5, Number(parsed.spawnInterval) || fallback.spawnInterval),
-      players: parsed.players === 2 ? 2 : 1,
       shipIndex: clamp(Math.floor(Number(parsed.shipIndex) || 0), 0, 23),
     };
-  } catch { return fallback; }
+  } catch {
+    return fallback;
+  }
 }
 
 export function saveOptions(cfg: RunConfig) {
@@ -45,4 +48,3 @@ export function saveLastResult(snap: GameSnapshot, cfg: RunConfig) {
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
-

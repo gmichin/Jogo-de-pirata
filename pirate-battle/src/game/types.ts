@@ -3,10 +3,10 @@ import type { Container, Sprite } from 'pixi.js';
 export type EnemyKind = 'chaser' | 'shooter';
 export type ProjectileOwner = 'player' | 'enemy';
 export type EndReason = 'time' | 'death' | 'abandoned' | null;
-export type PlayerId = 1 | 2;
+export type PlayerId = 1;
 
 export interface Entity {
-  gfx: Container;      // container holding ship sprite + fires
+  gfx: Container;
   ship: Sprite;
   fires: Sprite[];
   x: number;
@@ -15,7 +15,7 @@ export interface Entity {
   hp: number;
   maxHp: number;
   alive: boolean;
-  shipIndex: number;   // 0..23
+  shipIndex: number;
   rotation: number;
 }
 
@@ -32,6 +32,7 @@ export interface Enemy extends Entity {
   kind: EnemyKind;
   speed: number;
   attackTimer: number;
+  aimDirection: number;
   key: string;
 }
 
@@ -43,7 +44,7 @@ export interface Turret {
   hp: number;
   maxHp: number;
   alive: boolean;
-  rotation: number;
+  aimDirection: number;
   attackTimer: number;
   islandIndex: number;
   cornerIndex: number;
@@ -62,6 +63,7 @@ export interface Projectile {
   ownerId: PlayerId | null;
   traveled: number;
   range: number;
+  flightTime: number;
   alive: boolean;
 }
 
@@ -80,6 +82,5 @@ export interface GameSnapshot {
 export interface RunConfig {
   sessionTime: number;
   spawnInterval: number;
-  players: 1 | 2;
-  shipIndex: number; // 0..23 — navio escolhido pelo jogador
+  shipIndex: number;
 }
