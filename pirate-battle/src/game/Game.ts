@@ -1,7 +1,7 @@
 import {
   Application, Container, Graphics, Sprite, Text, TextStyle, Texture, TilingSprite,
 } from 'pixi.js';
-import { GAME_CONFIG as C, ISLANDS, SHIP_INDEX } from './config';
+import { GAME_CONFIG as C, ISLANDS, SHIP_INDEX, SHIP_ROTATION_OFFSET } from './config';
 import type {
   Enemy, Entity, GameSnapshot, Player, PlayerId,
   Projectile, Rect, RunConfig, Turret,
@@ -224,7 +224,8 @@ export class Game {
 
   private spawnPlayer() {
     const spawn = { x: C.arena.width / 2, y: C.arena.height - 80 };
-    const shipIndex = this.runConfig.shipIndex;
+    // Player SEMPRE usa ship_2.png (índice 1)
+    const shipIndex = SHIP_INDEX.playerShip;
     const { container, ship, fires } = this.buildShipContainer(shipIndex, C.player.radius);
     container.x = spawn.x;
     container.y = spawn.y;
@@ -277,8 +278,13 @@ export class Game {
   private spawnEnemy() {
     const kind = Math.random() < 0.55 ? 'chaser' : 'shooter';
     const spec = kind === 'chaser' ? C.chaser : C.shooter;
-    // Navios fixos: chaser = ship_9, shooter = ship_2
-    const shipIndex = kind === 'chaser' ? SHIP_INDEX.chaserShip : SHIP_INDEX.shooterShip;
+
+    // Navio fixo por tipo:
+    //   chaser  → ship_3.png (índice 2)
+    //   shooter → ship_4.png (índice 3)
+    const shipIndex = kind === 'chaser'
+      ? SHIP_INDEX.chaserShip
+      : SHIP_INDEX.shooterShip;
 
     let x = 0, y = 0, found = false;
     for (let i = 0; i < C.spawn.maxAttempts; i++) {
@@ -343,7 +349,7 @@ export class Game {
     const clamped = Math.max(0, Math.min(1, charge));
     const range = C.projectile.minRange + (C.projectile.maxRange - C.projectile.minRange) * clamped;
     const baseDir = p.rotation - Math.PI / 2;
-    const muzzle = p.radius * C.player.muzzleOffset;   // bem colado no casco
+    const muzzle = p.radius * C.player.muzzleOffset;
 
     if (slot === 'front') {
       this.spawnProjectile('player', p.id,
@@ -506,8 +512,10 @@ export class Game {
       }
 
       if (e.alive) {
+        // Guarda rotação final no campo `rotation` — usada pelo destroço.
+        e.rotation = e.aimDirection + Math.PI / 2;
         e.gfx.x = e.x; e.gfx.y = e.y;
-        e.gfx.rotation = e.aimDirection + Math.PI / 2;
+        e.gfx.rotation = e.rotation;
       }
     }
   }
@@ -655,8 +663,7 @@ export class Game {
     if (snap) snap.hp = p.hp;
     if (p.hp <= 0 && p.alive) {
       p.alive = false;
-      p.ship.alpha = 0.25;
-      p.fires.forEach(f => f.visible = false);
+      this.spawnPlayerWreck(p);
       this.end('death');
     }
   }
@@ -664,6 +671,7 @@ export class Game {
   /**
    * Destrói inimigo. Se `byPlayer`, dispara a sequência:
    * explosão média → explosão grande → naufrágio (1s, afundando) → some.
+   * Usa o navio-fantasma específico do tipo (chaser→ship_21, shooter→ship_22).
    */
   private destroyEnemy(e: Enemy, byPlayer: boolean) {
     if (!e.alive) return;
@@ -673,11 +681,16 @@ export class Game {
     this.aimGfx.get(e.key)?.destroy(); this.aimGfx.delete(e.key);
 
     const { x, y } = e;
-    const finalRotation = e.gfx.rotation;
-    const baseSize = e.radius * 3.2;
+    // Usa a MESMA rotação que o navio tinha no último frame vivo.
+    const finalRotation = e.rotation;
+    const baseSize = e.radius * 2.6;
 
-    // Texturas específicas por tipo
-    const wreckIndex = e.kind === 'chaser' ? SHIP_INDEX.chaserWreck : SHIP_INDEX.shooterWreck;
+    const wreckIndex = e.kind === 'chaser'
+      ? SHIP_INDEX.chaserWreck
+      : SHIP_INDEX.shooterWreck;
+    const rotationOffset = e.kind === 'chaser'
+      ? SHIP_ROTATION_OFFSET.chaserWreck
+      : SHIP_ROTATION_OFFSET.shooterWreck;
 
     e.ship.destroy();
     e.fires.forEach(f => f.destroy());
@@ -685,29 +698,26 @@ export class Game {
 
     if (!byPlayer) return;
 
-    // Explosão média
     const med = new Sprite(this.textures.explosionMedium);
     med.anchor.set(0.5); med.x = x; med.y = y;
-    this.fitSprite(med, baseSize);
+    this.fitSprite(med, baseSize * 1.2);
     this.world.addChild(med);
 
     this.schedule(C.destruction.mediumExplosionDuration, () => {
       med.destroy();
 
-      // Explosão grande
       const lg = new Sprite(this.textures.explosionLarge);
       lg.anchor.set(0.5); lg.x = x; lg.y = y;
-      this.fitSprite(lg, baseSize * 1.4);
+      this.fitSprite(lg, baseSize * 1.6);
       this.world.addChild(lg);
 
       this.schedule(C.destruction.largeExplosionDuration, () => {
         lg.destroy();
 
-        // Navio afundando (drift leve p/ direita+baixo, encolhe, esmaece)
         const wreck = new Sprite(this.textures.ships[wreckIndex]);
         wreck.anchor.set(0.5);
         wreck.x = x; wreck.y = y;
-        wreck.rotation = finalRotation;
+        wreck.rotation = finalRotation + rotationOffset;
         const baseScale = this.fitSprite(wreck, baseSize);
         this.world.addChild(wreck);
 
@@ -723,6 +733,33 @@ export class Game {
           dead: false,
         });
       });
+    });
+  }
+
+  /** Player morre → troca o sprite para ship_20 e o mantém afundando. */
+  private spawnPlayerWreck(p: Player) {
+    const x = p.x, y = p.y;
+    const finalRotation = p.rotation;
+    p.ship.visible = false;
+    p.fires.forEach(f => f.visible = false);
+
+    const wreck = new Sprite(this.textures.ships[SHIP_INDEX.playerWreck]);
+    wreck.anchor.set(0.5);
+    wreck.x = x; wreck.y = y;
+    wreck.rotation = finalRotation + SHIP_ROTATION_OFFSET.playerWreck;
+    const baseScale = this.fitSprite(wreck, p.radius * 2.6);
+    this.world.addChild(wreck);
+
+    this.wrecks.push({
+      sprite: wreck,
+      vx: C.destruction.wreckDriftX,
+      vy: C.destruction.wreckDriftY,
+      baseScale,
+      scaleFrom: 1,
+      scaleTo: C.destruction.wreckScaleTo,
+      elapsed: 0,
+      maxLife: C.destruction.wreckDuration,
+      dead: false,
     });
   }
 
@@ -806,7 +843,6 @@ export class Game {
   }
 
   private updateAimPreviews() {
-    // Marcadores de pouso dos projéteis em voo — ficam no ponto exato onde a bola cai
     this.projectileAimGfx.clear();
     for (const p of this.projectiles) {
       if (!p.alive) continue;
@@ -815,7 +851,6 @@ export class Game {
       this.drawAimMarker(this.projectileAimGfx, x, y, color);
     }
 
-    // Mira do player durante o charge
     if (this.player) {
       const p = this.player;
       const g = this.aimGfx.get('player-1');
@@ -841,7 +876,6 @@ export class Game {
       }
     }
 
-    // Mira dos shooters (vermelho vivo)
     for (const e of this.enemies) {
       const g = this.aimGfx.get(e.key);
       if (!g) continue;
@@ -860,7 +894,6 @@ export class Game {
         C.aim.lineColorEnemy);
     }
 
-    // Mira das torretas (vermelho vivo)
     for (const t of this.turrets) {
       const g = this.aimGfx.get(t.key);
       if (!g) continue;

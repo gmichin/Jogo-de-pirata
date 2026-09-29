@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { GAME_CONFIG, SHIP_COUNT } from '../game/config';
+import { GAME_CONFIG } from '../game/config';
 import type { RunConfig } from '../game/types';
 import { saveOptions } from '../storage';
 
@@ -12,7 +12,6 @@ interface Props {
 export default function Options({ initial, onSave, onCancel }: Props) {
   const [sessionTime, setSessionTime] = useState(initial.sessionTime);
   const [spawnInterval, setSpawnInterval] = useState(initial.spawnInterval);
-  const [shipIndex, setShipIndex] = useState(initial.shipIndex);
   const [error, setError] = useState<string | null>(null);
 
   const handleSave = () => {
@@ -21,7 +20,7 @@ export default function Options({ initial, onSave, onCancel }: Props) {
       return;
     }
     if (spawnInterval <= 0) { setError('Spawn interval must be greater than zero.'); return; }
-    const cfg: RunConfig = { sessionTime, spawnInterval, shipIndex };
+    const cfg: RunConfig = { sessionTime, spawnInterval, shipIndex: initial.shipIndex };
     saveOptions(cfg);
     onSave(cfg);
   };
@@ -44,22 +43,6 @@ export default function Options({ initial, onSave, onCancel }: Props) {
         <input type="number" min={0.5} step={0.5} value={spawnInterval}
           onChange={(e) => setSpawnInterval(Number(e.target.value))} />
       </label>
-
-      <fieldset className="ship-picker">
-        <legend>Your ship</legend>
-        <div className="ship-grid">
-          {Array.from({ length: SHIP_COUNT }, (_, i) => (
-            <button key={i}
-              type="button"
-              className={`ship-cell ${shipIndex === i ? 'active' : ''}`}
-              aria-label={`Ship ${i + 1}`}
-              aria-pressed={shipIndex === i}
-              onClick={() => setShipIndex(i)}>
-              <img src={`/assets/png/default/ships/ship_${i + 1}.png`} alt="" />
-            </button>
-          ))}
-        </div>
-      </fieldset>
 
       {error && <p className="error" role="alert">{error}</p>}
 

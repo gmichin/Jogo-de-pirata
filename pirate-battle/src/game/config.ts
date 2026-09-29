@@ -8,7 +8,7 @@ export const GAME_CONFIG = {
     hp: 100,
     frontCooldown: 0.25,
     sideCooldown: 0.6,
-    muzzleOffset: 0.25,      // antes 0.6 → tiro nasce mais colado
+    muzzleOffset: 0.25,
   },
 
   projectile: {
@@ -18,12 +18,16 @@ export const GAME_CONFIG = {
     playerFlightTime: 0.85,
     enemyFlightTime: 2.2,
     arcScale: 0.9,
-    minRange: 35,            // antes 80 → mira começa perto do navio
+    minRange: 35,
     maxRange: 380,
     landingRadius: 10,
   },
 
-  charge: { maxTime: 1.0 },
+  charge: {
+    // Antes era 1.0 → mira crescia rápido demais.
+    // 1.4s deixa ~35% mais lento que a mira dos inimigos (aimDuration 1.0).
+    maxTime: 1.4,
+  },
 
   chaser: {
     radius: 22.5,
@@ -69,8 +73,8 @@ export const GAME_CONFIG = {
   },
 
   aim: {
-    lineColor: 0xffe400,        // amarelo vivo (player)
-    lineColorEnemy: 0xff2020,   // vermelho bem vivo (inimigos)
+    lineColor: 0xffe400,
+    lineColorEnemy: 0xff2020,
     markerRadius: 11,
   },
 
@@ -83,10 +87,10 @@ export const GAME_CONFIG = {
   destruction: {
     mediumExplosionDuration: 0.18,
     largeExplosionDuration: 0.28,
-    wreckDuration: 1.0,        // 1s de naufrágio
-    wreckDriftX: 14,           // px/s para a direita
-    wreckDriftY: 9,            // px/s para baixo
-    wreckScaleTo: 0.7,         // encolhe até 70%
+    wreckDuration: 1.0,
+    wreckDriftX: 14,
+    wreckDriftY: 9,
+    wreckScaleTo: 0.7,
   },
 } as const;
 
@@ -98,10 +102,20 @@ export const ISLANDS = [
 
 export const SHIP_COUNT = 24;
 
-// Índices 0-based das imagens que você indicou
+// Índices 0-based = ship_(n+1).png
 export const SHIP_INDEX = {
-  chaserShip:   8,   // ships/ship_9.png
-  chaserWreck:  20,  // ships/ship_21.png
-  shooterShip:  1,   // ships/ship_2.png
-  shooterWreck: 19,  // ships/ship_20.png
+  playerShip:   1,    // ships/ship_2.png
+  playerWreck:  19,   // ships/ship_20.png
+  chaserShip:   2,    // ships/ship_3.png
+  chaserWreck:  20,   // ships/ship_21.png
+  shooterShip:  3,    // ships/ship_4.png
+  shooterWreck: 21,   // ships/ship_22.png
+} as const;
+
+// Offsets de rotação caso o sprite base do destroço aponte para uma direção
+// diferente do navio vivo. Deixe 0 se estiverem iguais.
+export const SHIP_ROTATION_OFFSET = {
+  playerWreck:  0,
+  chaserWreck:  0,
+  shooterWreck: 0,
 } as const;
