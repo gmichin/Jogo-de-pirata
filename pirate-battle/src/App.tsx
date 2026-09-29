@@ -24,6 +24,12 @@ export default function App() {
     setScreen('result');
   };
 
+  // Restart in-place: nova referência de runConfig dispara recriação do Game
+  const handleRestart = () => {
+    setRunConfig({ ...runConfig });
+    setScreen('game');
+  };
+
   return (
     <div className="app">
       {screen === 'menu' && (
@@ -35,10 +41,7 @@ export default function App() {
       {screen === 'options' && (
         <Options
           initial={runConfig}
-          onSave={(cfg) => {
-            setRunConfig(cfg);
-            setScreen('menu');
-          }}
+          onSave={(cfg) => { setRunConfig(cfg); setScreen('menu'); }}
           onCancel={() => setScreen('menu')}
         />
       )}
@@ -47,13 +50,14 @@ export default function App() {
           runConfig={runConfig}
           onEnd={handleEnd}
           onQuit={() => setScreen('menu')}
+          onRestart={handleRestart}
         />
       )}
       {screen === 'result' && result && (
         <ResultScreen
           snapshot={result}
           runConfig={runConfig}
-          onPlayAgain={() => startGame(runConfig)}
+          onPlayAgain={() => startGame({ ...runConfig })}
           onMenu={() => setScreen('menu')}
         />
       )}

@@ -219,15 +219,6 @@ button:focus-visible {
   object-fit: contain;
 }
 
-.quit-floating {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background: var(--danger);
-  color: #fff;
-  z-index: 10;
-}
-
 .loading-screen {
   display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 16px;

@@ -7,12 +7,21 @@ interface Props {
   runConfig: RunConfig;
   onEnd: (snap: GameSnapshot) => void;
   onQuit: () => void;
+  onRestart: () => void;
 }
 
-export default function GameCanvas({ runConfig, onEnd, onQuit }: Props) {
+export default function GameCanvas({ runConfig, onEnd, onQuit, onRestart }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Game | null>(null);
   const endedRef = useRef(false);
+
+  // Refs para callbacks — evita recriar o Game a cada render do App
+  const onEndRef = useRef(onEnd);
+  const onQuitRef = useRef(onQuit);
+  const onRestartRef = useRef(onRestart);
+  useEffect(() => { onEndRef.current = onEnd; }, [onEnd]);
+  useEffect(() => { onQuitRef.current = onQuit; }, [onQuit]);
+  useEffect(() => { onRestartRef.current = onRestart; }, [onRestart]);
 
   const [textures, setTextures] = useState<GameTextures | null>(null);
   const [progress, setProgress] = useState(0);
@@ -35,11 +44,18 @@ export default function GameCanvas({ runConfig, onEnd, onQuit }: Props) {
     let cancelled = false;
     endedRef.current = false;
 
-    const game = new Game(hostRef.current, runConfig, textures, (snap) => {
-      if (cancelled || endedRef.current) return;
-      endedRef.current = true;
-      onEnd(snap);
-    });
+    const game = new Game(
+      hostRef.current,
+      runConfig,
+      textures,
+      (snap) => {
+        if (cancelled || endedRef.current) return;
+        endedRef.current = true;
+        onEndRef.current(snap);
+      },
+      () => onQuitRef.current(),
+      () => onRestartRef.current(),
+    );
     gameRef.current = game;
 
     game.init().catch((err) => console.error('Failed to init game', err));
@@ -57,7 +73,7 @@ export default function GameCanvas({ runConfig, onEnd, onQuit }: Props) {
       game.destroy();
       gameRef.current = null;
     };
-  }, [runConfig, textures, onEnd]);
+  }, [runConfig, textures]);
 
   if (loadError) {
     return (
@@ -79,7 +95,6 @@ export default function GameCanvas({ runConfig, onEnd, onQuit }: Props) {
   return (
     <div className="game-screen">
       <div className="arena-host" ref={hostRef} />
-      <button className="quit-floating" onClick={onQuit} aria-label="Quit">Quit</button>
     </div>
   );
 }

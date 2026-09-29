@@ -1,5 +1,5 @@
 import {
-  Application, Container, Graphics, Sprite, Text, TextStyle, Texture, TilingSprite,
+  Application, Container, Graphics, Rectangle, Sprite, Text, TextStyle, Texture, TilingSprite,
 } from 'pixi.js';
 import { GAME_CONFIG as C, ISLANDS, SHIP_INDEX, SHIP_ROTATION_OFFSET } from './config';
 import { HealthBar } from './HealthBar';
@@ -25,6 +25,29 @@ const HUD_STYLE = new TextStyle({
   stroke: { color: 0x000000, width: 3 },
 });
 
+const TIMER_STYLE = new TextStyle({
+  fontFamily: 'system-ui, sans-serif',
+  fontSize: 20,
+  fontWeight: '700',
+  fill: 0xffe400,
+  stroke: { color: 0x000000, width: 3 },
+});
+
+const MENU_TITLE_STYLE = new TextStyle({
+  fontFamily: 'system-ui, sans-serif',
+  fontSize: 26,
+  fontWeight: '700',
+  fill: 0xffffff,
+  stroke: { color: 0x000000, width: 3 },
+});
+
+const MENU_BUTTON_STYLE = new TextStyle({
+  fontFamily: 'system-ui, sans-serif',
+  fontSize: 18,
+  fontWeight: '700',
+  fill: 0x10263a,
+});
+
 interface Scheduled { delay: number; action: () => void; done: boolean; }
 interface Wreck {
   sprite: Sprite;
@@ -37,8 +60,12 @@ interface Wreck {
 export class Game {
   private app: Application;
   private world: Container;
+  private hudLayer: Container;
+  private menuLayer: Container;
   private host: HTMLElement;
   private onEnd: OnEnd;
+  private onQuit: () => void;
+  private onRestart: () => void;
 
   private textures: {
     explosionLarge: Texture; explosionMedium: Texture; explosionSmall: Texture;
@@ -50,6 +77,12 @@ export class Game {
     counterPanel: Texture;
     enemyHealthFillGreen: Texture; enemyHealthFillRed: Texture;
     iconHeart: Texture;
+    iconTime: Texture;
+    buttonPrimaryDisabled: Texture;
+    buttonRoundNormal: Texture; buttonRoundHover: Texture; iconPause: Texture;
+    panelMenu: Texture;
+    buttonPrimaryNormal: Texture; buttonPrimaryHover: Texture; buttonPrimaryPressed: Texture;
+    iconPlay: Texture; iconRestart: Texture; iconHome: Texture;
   };
 
   private player: Player | null = null;
@@ -62,12 +95,16 @@ export class Game {
   private enemyBars = new Map<string, HealthBar>();
   private turretBars = new Map<string, HealthBar>();
 
-  // ---- Pixi HUD ----
-  private hudLayer: Container;
+  // HUD
   private playerBar: HealthBar | null = null;
   private playerHpText: Text | null = null;
   private scoreText: Text | null = null;
   private timeText: Text | null = null;
+  private pauseButton: Container | null = null;
+
+  // Menu
+  private pauseMenu: Container | null = null;
+  private menuMode: 'pause' | 'death' | null = null;
 
   private aimGfx = new Map<string, Graphics>();
   private projectileAimGfx: Graphics;
@@ -88,14 +125,19 @@ export class Game {
     runConfig: RunConfig,
     textures: Game['textures'],
     onEnd: OnEnd,
+    onQuit: () => void,
+    onRestart: () => void,
   ) {
     this.host = host;
     this.runConfig = runConfig;
     this.textures = textures;
     this.onEnd = onEnd;
+    this.onQuit = onQuit;
+    this.onRestart = onRestart;
     this.app = new Application();
     this.world = new Container();
     this.hudLayer = new Container();
+    this.menuLayer = new Container();
     this.projectileAimGfx = new Graphics();
 
     this.snapshot = {
@@ -118,6 +160,7 @@ export class Game {
     this.host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.world);
     this.app.stage.addChild(this.hudLayer);
+    this.app.stage.addChild(this.menuLayer);
 
     this.drawWater();
     this.spawnIslandsAndTurrets();
@@ -151,25 +194,27 @@ export class Game {
     return { ...this.snapshot, players: this.snapshot.players.map(p => ({ ...p })) };
   }
 
+  /** Alterna pausa via tecla (P/Esc). Abre/fecha o menu de pausa. */
   togglePause() {
-    if (this.snapshot.ended) return;
-    const next = !this.snapshot.paused;
-    this.snapshot.paused = next;
-    if (next) this.keys = {};
+    if (this.menuMode === 'death' || this.ended) return;
+    if (this.menuMode === 'pause') this.closeMenu();
+    else this.openMenu('pause');
   }
 
   // ---------- Input ----------
 
   private onKeyDown = (e: KeyboardEvent) => {
-    // Previne scroll da página com Espaço quando o jogo está ativo
     if (e.key === ' ' || e.code === 'Space') e.preventDefault();
     this.keys[e.key] = true;
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
   };
   private onKeyUp = (e: KeyboardEvent) => { this.keys[e.key] = false; };
-  private onBlur = () => { if (!this.snapshot.ended) this.snapshot.paused = true; };
+  private onBlur = () => {
+    if (this.ended || this.menuMode !== null) return;
+    this.openMenu('pause');
+  };
   private onVisibility = () => {
-    if (document.hidden && !this.snapshot.ended) this.snapshot.paused = true;
+    if (document.hidden && !this.ended && this.menuMode === null) this.openMenu('pause');
   };
 
   // ---------- Setup ----------
@@ -233,6 +278,12 @@ export class Game {
     const scale = maxSize / Math.max(w, h);
     sprite.scale.set(scale);
     return scale;
+  }
+
+  private applyScale(s: Sprite, targetW: number, targetH: number) {
+    const w = s.texture.width || 1;
+    const h = s.texture.height || 1;
+    s.scale.set(targetW / w, targetH / h);
   }
 
   private spawnPlayer() {
@@ -350,68 +401,117 @@ export class Game {
     this.ensureAimGfx(key);
   }
 
-  // ---------- HUD (tudo em Pixi) ----------
+  // ---------- HUD ----------
 
   private createHud() {
     const m = C.healthBar.hudMargin;
     const barW = C.healthBar.hudWidth;
 
-    // Container local do HUD esquerdo (barra + coração + número)
+    // ---- Barra do player (canto superior esquerdo) ----
     const left = new Container();
     left.x = m;
     left.y = m;
     this.hudLayer.addChild(left);
 
-    // Barra do player — usando HealthBar genérico
     this.playerBar = new HealthBar({
       frame: this.textures.healthFrame,
       green: this.textures.enemyHealthFillGreen,
-      amber: this.textures.enemyHealthFillGreen, // player só tem verde/vermelho
+      amber: this.textures.enemyHealthFillGreen,
       red: this.textures.enemyHealthFillRed,
       targetWidth: barW,
-      greenThreshold: C.healthBar.playerRedThreshold, // >25% = verde
-      amberThreshold: C.healthBar.playerRedThreshold - 0.001, // praticamente desativa âmbar
+      greenThreshold: C.healthBar.playerRedThreshold,
+      amberThreshold: C.healthBar.playerRedThreshold - 0.001,
       hideOnZero: true,
     });
-    // HealthBar é centralizado; para ancorar no canto esquerdo,
-    // posicionamos considerando metade da largura:
     this.playerBar.setPosition(barW / 2, C.healthBar.hudHeight / 2);
     left.addChild(this.playerBar.container);
 
     const heart = new Sprite(this.textures.iconHeart);
     heart.anchor.set(0.5, 0.5);
-    const heartSize = C.healthBar.hudHeight * 1.2;
+    const heartSize = C.healthBar.hudHeight * 0.9;
     const aspect = (heart.texture.width || 1) / (heart.texture.height || 1);
     heart.height = heartSize;
     heart.width = heartSize * aspect;
-    heart.x = 20;                                 
-    heart.y = C.healthBar.hudHeight / 2;       
+    heart.x = 6;
+    heart.y = C.healthBar.hudHeight / 2;
     left.addChild(heart);
 
     this.playerHpText = new Text({ text: '100', style: HUD_STYLE });
     this.playerHpText.anchor.set(0, 0.5);
-    this.playerHpText.x = barW + 2;              // antes era + 14
+    this.playerHpText.x = barW + 2;
     this.playerHpText.y = C.healthBar.hudHeight / 2;
     this.playerHpText.style.fill = 0x35e06b;
     left.addChild(this.playerHpText);
 
-    // Score e Time no canto superior direito
+    // Score abaixo da barra de HP
     this.scoreText = new Text({ text: 'Score: 0', style: HUD_STYLE });
-    this.scoreText.anchor.set(1, 0);
-    this.timeText = new Text({ text: `Time: ${Math.ceil(this.snapshot.timeLeft)}s`, style: HUD_STYLE });
-    this.timeText.anchor.set(1, 0);
+    this.scoreText.anchor.set(0, 0);
+    this.scoreText.x = m;
+    this.scoreText.y = m + C.healthBar.hudHeight + 6;
+    this.hudLayer.addChild(this.scoreText);
+
+    // ---- Timer (topo central) ----
+    const panelH = 44;
+    const panelW = 110;
+    const gap = 6;
+    const iconSize = 34;
+    const totalW = iconSize + gap + panelW;
+    const startX = C.arena.width / 2 - totalW / 2;
+
+    const icon = new Sprite(this.textures.iconTime);
+    icon.anchor.set(0.5);
+    this.applyScale(icon, iconSize, iconSize);
+    icon.x = startX + iconSize / 2;
+    icon.y = m + panelH / 2;
+    this.hudLayer.addChild(icon);
+
+    const panel = new Sprite(this.textures.buttonPrimaryDisabled);
+    panel.anchor.set(0.5);
+    this.applyScale(panel, panelW, panelH);
+    panel.x = startX + iconSize + gap + panelW / 2;
+    panel.y = m + panelH / 2;
+    this.hudLayer.addChild(panel);
+
+    this.timeText = new Text({ text: String(Math.ceil(this.snapshot.timeLeft)), style: TIMER_STYLE });
+    this.timeText.anchor.set(0.5);
+    this.timeText.x = panel.x;
+    this.timeText.y = panel.y;
+    this.hudLayer.addChild(this.timeText);
+
+    // ---- Botão de pause (topo direito) ----
+    this.createPauseButton();
   }
 
-  private layoutHud() {
+  private createPauseButton() {
     const m = C.healthBar.hudMargin;
-    if (this.scoreText) {
-      this.scoreText.x = C.arena.width - m;
-      this.scoreText.y = m;
-    }
-    if (this.timeText) {
-      this.timeText.x = C.arena.width - m;
-      this.timeText.y = m + 30;
-    }
+    const size = 48;
+    const c = new Container();
+    c.x = C.arena.width - m - size / 2;
+    c.y = m + size / 2;
+    this.hudLayer.addChild(c);
+    this.pauseButton = c;
+
+    const bg = new Sprite(this.textures.buttonRoundNormal);
+    bg.anchor.set(0.5);
+    this.applyScale(bg, size, size);
+    c.addChild(bg);
+
+    const icon = new Sprite(this.textures.iconPause);
+    icon.anchor.set(0.5);
+    this.applyScale(icon, size * 0.45, size * 0.45);
+    c.addChild(icon);
+
+    bg.eventMode = 'static';
+    bg.cursor = 'pointer';
+    bg.on('pointerover', () => { bg.texture = this.textures.buttonRoundHover; this.applyScale(bg, size, size); });
+    bg.on('pointerout',  () => { bg.texture = this.textures.buttonRoundNormal; this.applyScale(bg, size, size); });
+    bg.on('pointerdown', () => { this.applyScale(bg, size * 0.94, size * 0.94); });
+    bg.on('pointerup',   () => {
+      bg.texture = this.textures.buttonRoundHover;
+      this.applyScale(bg, size, size);
+      if (this.menuMode === null && !this.ended) this.openMenu('pause');
+    });
+    bg.on('pointerupoutside', () => { bg.texture = this.textures.buttonRoundNormal; this.applyScale(bg, size, size); });
   }
 
   private updateHud() {
@@ -423,7 +523,137 @@ export class Game {
       this.playerHpText.visible = ratio > 0;
     }
     if (this.scoreText) this.scoreText.text = `Score: ${this.snapshot.score}`;
-    if (this.timeText) this.timeText.text = `Time: ${Math.ceil(this.snapshot.timeLeft)}s`;
+    if (this.timeText) this.timeText.text = String(Math.max(0, Math.ceil(this.snapshot.timeLeft)));
+  }
+
+  // ---------- Menu ----------
+
+  private openMenu(mode: 'pause' | 'death') {
+    if (this.pauseMenu) return;
+    this.menuMode = mode;
+    this.snapshot.paused = true;
+    if (this.pauseButton) this.pauseButton.visible = false;
+
+    const layer = new Container();
+    this.pauseMenu = layer;
+    this.menuLayer.addChild(layer);
+
+    // Overlay escuro bloqueando cliques abaixo
+    const overlay = new Graphics();
+    overlay.rect(0, 0, C.arena.width, C.arena.height).fill({ color: 0x000000, alpha: 0.55 });
+    overlay.eventMode = 'static';
+    overlay.hitArea = new Rectangle(0, 0, C.arena.width, C.arena.height);
+    layer.addChild(overlay);
+
+    const cx = C.arena.width / 2;
+    const cy = C.arena.height / 2;
+
+    const panelW = 380;
+    const panelH = mode === 'pause' ? 380 : 320;
+
+    const panel = new Sprite(this.textures.panelMenu);
+    panel.anchor.set(0.5);
+    this.applyScale(panel, panelW, panelH);
+    panel.x = cx;
+    panel.y = cy;
+    layer.addChild(panel);
+
+    const title = new Text({
+      text: mode === 'pause' ? 'PAUSED' : 'GAME OVER',
+      style: MENU_TITLE_STYLE,
+    });
+    title.anchor.set(0.5);
+    title.x = cx;
+    title.y = cy - panelH / 2 + 52;
+    layer.addChild(title);
+
+    const buttons: { label: string; icon: Texture; onClick: () => void }[] = [];
+    if (mode === 'pause') {
+      buttons.push({
+        label: 'Resume',
+        icon: this.textures.iconPlay,
+        onClick: () => this.closeMenu(),
+      });
+    }
+    buttons.push({
+      label: 'Restart',
+      icon: this.textures.iconRestart,
+      onClick: () => { this.closeMenu(); this.onRestart(); },
+    });
+    buttons.push({
+      label: 'Main Menu',
+      icon: this.textures.iconHome,
+      onClick: () => { this.closeMenu(); this.onQuit(); },
+    });
+
+    const btnW = 260;
+    const btnH = 54;
+    const gap = 14;
+    const totalH = buttons.length * btnH + (buttons.length - 1) * gap;
+    const startY = cy - totalH / 2 + 24 + btnH / 2;
+
+    buttons.forEach((b, i) => {
+      const y = startY + i * (btnH + gap);
+      const btn = this.makeMenuButton({
+        x: cx, y,
+        width: btnW, height: btnH,
+        label: b.label, icon: b.icon, onClick: b.onClick,
+      });
+      layer.addChild(btn);
+    });
+  }
+
+  private makeMenuButton(opts: {
+    x: number; y: number;
+    width: number; height: number;
+    label: string;
+    icon: Texture;
+    onClick: () => void;
+  }): Container {
+    const c = new Container();
+    c.x = opts.x;
+    c.y = opts.y;
+
+    const bg = new Sprite(this.textures.buttonPrimaryNormal);
+    bg.anchor.set(0.5);
+    this.applyScale(bg, opts.width, opts.height);
+    c.addChild(bg);
+
+    const iconSize = opts.height * 0.5;
+    const icon = new Sprite(opts.icon);
+    icon.anchor.set(0.5);
+    this.applyScale(icon, iconSize, iconSize);
+    icon.x = -opts.width / 2 + opts.height * 0.7;
+    c.addChild(icon);
+
+    const txt = new Text({ text: opts.label, style: MENU_BUTTON_STYLE });
+    txt.anchor.set(0.5);
+    txt.x = opts.height * 0.2;
+    c.addChild(txt);
+
+    const setTex = (tex: Texture) => {
+      bg.texture = tex;
+      this.applyScale(bg, opts.width, opts.height);
+    };
+
+    bg.eventMode = 'static';
+    bg.cursor = 'pointer';
+    bg.on('pointerover', () => setTex(this.textures.buttonPrimaryHover));
+    bg.on('pointerout',  () => setTex(this.textures.buttonPrimaryNormal));
+    bg.on('pointerdown', () => setTex(this.textures.buttonPrimaryPressed));
+    bg.on('pointerup',   () => { setTex(this.textures.buttonPrimaryHover); opts.onClick(); });
+    bg.on('pointerupoutside', () => setTex(this.textures.buttonPrimaryNormal));
+
+    return c;
+  }
+
+  private closeMenu() {
+    if (!this.pauseMenu) return;
+    this.pauseMenu.destroy({ children: true });
+    this.pauseMenu = null;
+    this.menuMode = null;
+    this.snapshot.paused = false;
+    if (this.pauseButton) this.pauseButton.visible = true;
   }
 
   // ---------- Projectiles ----------
@@ -485,7 +715,9 @@ export class Game {
   // ---------- Update loop ----------
 
   private update = () => {
-    if (this.destroyed || this.ended) return;
+    if (this.destroyed) return;
+    if (this.ended) return;             // time expirou → App já vai trocar de tela
+    if (this.menuMode !== null) return; // menu aberto → congela simulação
     if (!this.snapshot.running || this.snapshot.paused) return;
 
     const dt = this.app.ticker.deltaMS / 1000;
@@ -512,7 +744,6 @@ export class Game {
     this.updateEnemyBars();
     this.updateAimPreviews();
     this.updateHud();
-    this.layoutHud();
   };
 
   private schedule(delay: number, action: () => void) {
@@ -556,8 +787,7 @@ export class Game {
     p.frontTimer -= dt;
     p.sideTimer -= dt;
 
-    // Tiro frontal agora na tecla ESPAÇO
-    const frontKey = k[' '] || k['Spacebar'];
+    const frontKey = k[' '];
     const leftKey  = k['q'] || k['Q'];
     const rightKey = k['e'] || k['E'];
     const chargeStep = dt / C.charge.maxTime;
@@ -615,21 +845,15 @@ export class Game {
             e.x += (dx / dist) * e.speed * dt;
             e.y += (dy / dist) * e.speed * dt;
           }
-
           e.attackTimer -= dt;
           if (dist <= C.shooter.attackRange) {
-            // Mira sempre na posição ATUAL do player.
-            // No instante do disparo, a direção é congelada e o projétil
-            // percorre exatamente a distância até o player — se ele não se
-            // mover durante o voo, é atingido.
             e.aimDirection = Math.atan2(dy, dx);
             if (e.attackTimer <= 0) {
               e.attackTimer = C.shooter.attackCooldown + Math.random() * C.shooter.cooldownJitter;
-              const range = dist; // <-- dinâmico
               this.spawnProjectile('enemy', null,
                 e.x + Math.cos(e.aimDirection) * (e.radius + 4),
                 e.y + Math.sin(e.aimDirection) * (e.radius + 4),
-                e.aimDirection, range, C.projectile.enemyFlightTime);
+                e.aimDirection, dist, C.projectile.enemyFlightTime);
             }
           } else {
             if (e.attackTimer < 0) e.attackTimer = 0;
@@ -669,7 +893,6 @@ export class Game {
       t.attackTimer -= dt;
 
       if (dist <= C.turret.range) {
-        // Mesma regra: mira no player atual, range = distância
         t.aimDirection = Math.atan2(dy, dx);
         if (t.attackTimer <= 0) {
           t.attackTimer = C.turret.attackCooldown + Math.random() * C.turret.cooldownJitter;
@@ -817,7 +1040,7 @@ export class Game {
     if (p.hp <= 0 && p.alive) {
       p.alive = false;
       this.spawnPlayerWreck(p);
-      this.end('death');
+      this.die();
     }
   }
 
@@ -918,7 +1141,7 @@ export class Game {
     this.schedule(life, () => sprite.destroy());
   }
 
-  // ---------- Fires (apenas inimigos) ----------
+  // ---------- Fires ----------
 
   private updateShipFires(entity: Entity) {
     if (!entity.alive) return;
@@ -983,7 +1206,6 @@ export class Game {
       }
     }
 
-    // Shooters: mira acompanha o player até o instante do disparo
     for (const e of this.enemies) {
       const g = this.aimGfx.get(e.key);
       if (!g) continue;
@@ -1062,6 +1284,7 @@ export class Game {
       y >= i.y - padding && y <= i.y + i.h + padding);
   }
 
+  /** Fim por tempo — notifica o App (tela de resultado). */
   private end(reason: 'time' | 'death') {
     if (this.ended) return;
     this.ended = true;
@@ -1069,5 +1292,13 @@ export class Game {
     this.snapshot.running = false;
     this.snapshot.endReason = reason;
     this.onEnd(this.getSnapshot());
+  }
+
+  /** Morte do jogador — apenas mostra o menu de morte, sem ir ao Result. */
+  private die() {
+    if (this.menuMode === 'death') return;
+    this.snapshot.running = false;
+    this.snapshot.endReason = 'death';
+    this.openMenu('death');
   }
 }

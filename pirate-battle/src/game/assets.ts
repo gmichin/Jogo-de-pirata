@@ -15,7 +15,7 @@ export interface GameTextures {
   // tiles
   tileCannonPlatform: Texture;
   tileWater: Texture;
-  // HUD
+  // HUD básico
   healthFrame: Texture;
   healthFillGreen: Texture;
   healthFillAmber: Texture;
@@ -24,14 +24,26 @@ export interface GameTextures {
   enemyHealthFillGreen: Texture;
   enemyHealthFillRed: Texture;
   iconHeart: Texture;
+  // HUD novo
+  iconTime: Texture;
+  buttonPrimaryDisabled: Texture;
+  buttonRoundNormal: Texture;
+  buttonRoundHover: Texture;
+  iconPause: Texture;
+  // Menu
+  panelMenu: Texture;
+  buttonPrimaryNormal: Texture;
+  buttonPrimaryHover: Texture;
+  buttonPrimaryPressed: Texture;
+  iconPlay: Texture;
+  iconRestart: Texture;
+  iconHome: Texture;
 }
 
 let cached: GameTextures | null = null;
 let inflight: Promise<GameTextures> | null = null;
 
-export function getCachedTextures(): GameTextures | null {
-  return cached;
-}
+export function getCachedTextures(): GameTextures | null { return cached; }
 
 export async function loadGameTextures(
   onProgress?: (loaded: number, total: number) => void
@@ -62,6 +74,18 @@ export async function loadGameTextures(
     enemyHealthFillGreen:  '/assets/png/default/ui/hud/enemy_health_fill_green.png',
     enemyHealthFillRed:    '/assets/png/default/ui/hud/enemy_health_fill_red.png',
     iconHeart:             '/assets/png/default/ui/hud/icon_heart.png',
+    iconTime:              '/assets/png/default/ui/hud/icon_time.png',
+    buttonPrimaryDisabled: '/assets/png/default/ui/menu/button_primary_disabled.png',
+    buttonRoundNormal:     '/assets/png/default/ui/controls/button_round_normal.png',
+    buttonRoundHover:      '/assets/png/default/ui/controls/button_round_hover.png',
+    iconPause:             '/assets/png/default/ui/controls/icon_pause.png',
+    panelMenu:             '/assets/png/default/ui/menu/panel_menu.png',
+    buttonPrimaryNormal:   '/assets/png/default/ui/menu/button_primary_normal.png',
+    buttonPrimaryHover:    '/assets/png/default/ui/menu/button_primary_hover.png',
+    buttonPrimaryPressed:  '/assets/png/default/ui/menu/button_primary_pressed.png',
+    iconPlay:              '/assets/png/default/ui/controls/icon_play.png',
+    iconRestart:           '/assets/png/default/ui/controls/icon_restart.png',
+    iconHome:              '/assets/png/default/ui/controls/icon_home.png',
   } as const;
 
   const all: Record<string, string> = { ...manifest };
@@ -101,6 +125,18 @@ export async function loadGameTextures(
       enemyHealthFillGreen: loadedMap.enemyHealthFillGreen,
       enemyHealthFillRed:   loadedMap.enemyHealthFillRed,
       iconHeart:            loadedMap.iconHeart,
+      iconTime:             loadedMap.iconTime,
+      buttonPrimaryDisabled:loadedMap.buttonPrimaryDisabled,
+      buttonRoundNormal:    loadedMap.buttonRoundNormal,
+      buttonRoundHover:     loadedMap.buttonRoundHover,
+      iconPause:            loadedMap.iconPause,
+      panelMenu:            loadedMap.panelMenu,
+      buttonPrimaryNormal:  loadedMap.buttonPrimaryNormal,
+      buttonPrimaryHover:   loadedMap.buttonPrimaryHover,
+      buttonPrimaryPressed: loadedMap.buttonPrimaryPressed,
+      iconPlay:             loadedMap.iconPlay,
+      iconRestart:          loadedMap.iconRestart,
+      iconHome:             loadedMap.iconHome,
       ships: Array.from({ length: SHIP_COUNT }, (_, i) => loadedMap[`ship_${i}`]),
     };
     inflight = null;
