@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Game } from '../game/Game';
+import { loadGameTextures, type GameTextures } from '../game/assets';
 import type { GameSnapshot, RunConfig } from '../game/types';
 
 interface Props {
@@ -11,26 +12,41 @@ interface Props {
 export default function GameCanvas({ runConfig, onEnd, onQuit }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Game | null>(null);
+  const endedRef = useRef(false);
+
+  const [textures, setTextures] = useState<GameTextures | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const [hud, setHud] = useState<GameSnapshot>({
     score: 0,
     players: Array.from({ length: runConfig.players }, (_, i) => ({
-      id: (i + 1) as 1 | 2,
-      hp: 100,
-      maxHp: 100,
+      id: (i + 1) as 1 | 2, hp: 100, maxHp: 100,
     })),
     timeLeft: runConfig.sessionTime,
-    running: true,
-    paused: false,
-    ended: false,
-    endReason: null,
+    running: true, paused: false, ended: false, endReason: null,
   });
-  const endedRef = useRef(false);
 
+  // 1) Carrega texturas
   useEffect(() => {
-    if (!hostRef.current) return;
     let cancelled = false;
+    setLoadError(null);
+    setProgress(0);
+    loadGameTextures((loaded, total) => {
+      if (!cancelled) setProgress(loaded / total);
+    })
+      .then((t) => { if (!cancelled) setTextures(t); })
+      .catch((err) => { if (!cancelled) setLoadError(String(err?.message ?? err)); });
+    return () => { cancelled = true; };
+  }, []);
 
-    const game = new Game(hostRef.current, runConfig, (snap) => {
+  // 2) Instancia o Game
+  useEffect(() => {
+    if (!hostRef.current || !textures) return;
+    let cancelled = false;
+    endedRef.current = false;
+
+    const game = new Game(hostRef.current, runConfig, textures, (snap) => {
       if (cancelled || endedRef.current) return;
       endedRef.current = true;
       onEnd(snap);
@@ -59,65 +75,37 @@ export default function GameCanvas({ runConfig, onEnd, onQuit }: Props) {
       game.destroy();
       gameRef.current = null;
     };
-  }, [runConfig, onEnd]);
+  }, [runConfig, textures, onEnd]);
+
+  if (loadError) {
+    return (
+      <div className="game-screen loading-screen">
+        <p className="error" role="alert">Failed to load assets: {loadError}</p>
+        <button onClick={onQuit}>Back to menu</button>
+      </div>
+    );
+  }
+  if (!textures) {
+    return (
+      <div className="game-screen loading-screen" aria-live="polite">
+        <p>Loading assets… {Math.round(progress * 100)}%</p>
+        <div className="progress"><div style={{ width: `${progress * 100}%` }} /></div>
+      </div>
+    );
+  }
 
   return (
     <div className="game-screen">
       <div className="hud" aria-live="polite">
         <span>Score: {hud.score}</span>
         {hud.players.map((p) => (
-          <span key={p.id} className={`hp hp-p${p.id}`}>
-            P{p.id} HP: {p.hp}
-          </span>
+          <span key={p.id} className={`hp hp-p${p.id}`}>P{p.id} HP: {p.hp}</span>
         ))}
         <span>Time: {Math.ceil(hud.timeLeft)}s</span>
         {hud.paused && <span className="paused">PAUSED - press P to resume</span>}
+        <button className="quit-inline" onClick={onQuit}>Quit</button>
       </div>
-
       <div className="arena-host" ref={hostRef} />
-
-      <div className="touch-controls">
-        <button
-          aria-label="P1 rotate left"
-          onPointerDown={() => dispatchKey('a', true)}
-          onPointerUp={() => dispatchKey('a', false)}
-          onPointerLeave={() => dispatchKey('a', false)}
-        >↺</button>
-        <button
-          aria-label="P1 move forward"
-          onPointerDown={() => dispatchKey('w', true)}
-          onPointerUp={() => dispatchKey('w', false)}
-          onPointerLeave={() => dispatchKey('w', false)}
-        >▲</button>
-        <button
-          aria-label="P1 rotate right"
-          onPointerDown={() => dispatchKey('d', true)}
-          onPointerUp={() => dispatchKey('d', false)}
-          onPointerLeave={() => dispatchKey('d', false)}
-        >↻</button>
-        <button
-          aria-label="P1 front shot (hold to charge)"
-          onPointerDown={() => dispatchKey('2', true)}
-          onPointerUp={() => dispatchKey('2', false)}
-        >Fire</button>
-        <button
-          aria-label="P1 left shot (hold to charge)"
-          onPointerDown={() => dispatchKey('q', true)}
-          onPointerUp={() => dispatchKey('q', false)}
-        >L</button>
-        <button
-          aria-label="P1 right shot (hold to charge)"
-          onPointerDown={() => dispatchKey('e', true)}
-          onPointerUp={() => dispatchKey('e', false)}
-        >R</button>
-      </div>
-
-      <button className="quit" onClick={onQuit}>Quit</button>
     </div>
   );
-}
-
-function dispatchKey(key: string, down: boolean) {
-  const evt = new KeyboardEvent(down ? 'keydown' : 'keyup', { key });
-  window.dispatchEvent(evt);
 }

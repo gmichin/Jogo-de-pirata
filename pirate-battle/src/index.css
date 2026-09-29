@@ -197,13 +197,63 @@ button:focus-visible {
   margin-top: 16px;
 }
 
-/* ---------- Game screen ---------- */
 .game-screen {
-  width: 100%;
-  max-width: 960px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  background: #06192b;
+}
+.game-screen .hud {
+  display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+  font-weight: 600; font-size: 15px;
+  background: var(--panel); padding: 10px 14px;
+  border-radius: 0;
+}
+.hud .quit-inline {
+  margin-left: auto;
+  background: var(--danger); color: #fff;
+}
+.arena-host {
+  flex: 1; min-height: 0;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.arena-host canvas {
+  max-width: 100%; max-height: 100%;
+  height: auto; width: auto;
+  display: block;
+}
+.loading-screen {
+  align-items: center; justify-content: center; gap: 16px;
+}
+.loading-screen .progress {
+  width: 260px; height: 8px; background: #143050; border-radius: 4px; overflow: hidden;
+}
+.loading-screen .progress > div {
+  height: 100%; background: var(--accent); transition: width 0.15s ease;
+}
+
+/* ---------- Ship picker ---------- */
+.ship-picker {
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 8px; padding: 12px; margin-bottom: 14px;
+}
+.ship-picker legend { padding: 0 6px; color: var(--accent); font-weight: 600; }
+.ship-grid {
+  display: grid; grid-template-columns: repeat(8, 1fr);
+  gap: 6px; max-height: 320px; overflow-y: auto;
+}
+.ship-cell {
+  background: rgba(0,0,0,0.25);
+  border: 2px solid transparent; border-radius: 6px;
+  padding: 4px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.ship-cell img { width: 100%; height: auto; display: block; }
+.ship-cell.active { border-color: var(--accent); background: rgba(255,209,102,0.15); }
+.ship-cell:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+@media (max-width: 640px) {
+  .ship-grid { grid-template-columns: repeat(4, 1fr); }
 }
 
 .hud {

@@ -2,7 +2,7 @@ export const GAME_CONFIG = {
   arena: { width: 900, height: 600 },
 
   player: {
-    radius: 18,
+    radius: 22,
     speed: 140,
     rotationSpeed: 2.6,
     hp: 100,
@@ -11,43 +11,45 @@ export const GAME_CONFIG = {
   },
 
   projectile: {
-    radius: 4,
+    radius: 5,
     speed: 340,
-    damage: 10,
-    enemyDamage: 8,
-    // Projectile travels a fixed range based on charge (see player.charge)
+    damage: 12,
+    enemyDamage: 10,
     arcScale: 0.9,
-    minRange: 60,
+    minRange: 80,
     maxRange: 380,
+    // Radius of the "landing" hit test — must land on/near the target
+    landingRadius: 12,
   },
 
   charge: {
     // Seconds to reach full charge
-    maxTime: 1.2,
-    // At zero charge, the range is minRange; at full charge, maxRange
+    maxTime: 1.0,
   },
 
   chaser: {
-    radius: 16,
+    radius: 18,
     hp: 20,
     speed: 80,
     contactDamage: 25,
   },
 
   shooter: {
-    radius: 16,
+    radius: 18,
     hp: 30,
-    speed: 50,
-    attackRange: 260,
-    attackCooldown: 1.6,
+    speed: 55,
+    attackRange: 280,
+    attackCooldown: 1.0,      // fixo, 1s
+    cooldownJitter: 0.15,     // dessincroniza
     projectileRange: 300,
   },
 
   turret: {
-    radius: 20,
+    radius: 14,
     hp: 40,
     range: 320,
-    attackCooldown: 2.2,
+    attackCooldown: 1.0,
+    cooldownJitter: 0.2,
     projectileDamage: 12,
     projectileRange: 320,
   },
@@ -65,12 +67,24 @@ export const GAME_CONFIG = {
   },
 
   aim: {
-    // Draw a preview line and circle
     lineColor: 0xfff6b0,
     lineColorEnemy: 0xff9a6b,
     maxDots: 12,
     dotSpacing: 18,
     targetCircleRadius: 8,
+  },
+
+  // HP-ratio thresholds for fire overlays (fires appear below the threshold)
+  damageStates: [
+    { maxHpRatio: 0.5,  fires: 1 },
+    { maxHpRatio: 0.25, fires: 2 },
+    { maxHpRatio: 0.1,  fires: 4 },
+  ],
+
+  destruction: {
+    mediumExplosionDuration: 0.18,
+    largeExplosionDuration: 0.28,
+    wreckDuration: 0.5,
   },
 } as const;
 
@@ -79,3 +93,5 @@ export const ISLANDS = [
   { x: 620, y: 380, w: 180, h: 140 },
   { x: 400, y: 260, w: 120, h: 90 },
 ] as const;
+
+export const SHIP_COUNT = 24;
