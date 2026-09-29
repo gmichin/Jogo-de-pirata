@@ -2,19 +2,13 @@ import {
   Application, Container, Graphics, Sprite, Text, TextStyle, Texture, TilingSprite,
 } from 'pixi.js';
 import { GAME_CONFIG as C, ISLANDS, SHIP_INDEX, SHIP_ROTATION_OFFSET } from './config';
+import { HealthBar } from './HealthBar';
 import type {
   Enemy, Entity, GameSnapshot, Player, PlayerId,
   Projectile, Rect, RunConfig, Turret,
 } from './types';
 
 type OnEnd = (snapshot: GameSnapshot) => void;
-
-const HP_STYLE = new TextStyle({
-  fontFamily: 'system-ui, sans-serif',
-  fontSize: 12,
-  fill: 0xffffff,
-  stroke: { color: 0x000000, width: 2 },
-});
 
 const FIRE_OFFSETS = [
   { x: -0.45, y: -0.15 },
@@ -23,18 +17,21 @@ const FIRE_OFFSETS = [
   { x: -0.15, y: -0.55 },
 ];
 
-interface Scheduled { delay: number; action: () => void; done: boolean; }
+const HUD_STYLE = new TextStyle({
+  fontFamily: 'system-ui, sans-serif',
+  fontSize: 22,
+  fontWeight: '700',
+  fill: 0xffffff,
+  stroke: { color: 0x000000, width: 3 },
+});
 
+interface Scheduled { delay: number; action: () => void; done: boolean; }
 interface Wreck {
   sprite: Sprite;
-  vx: number;
-  vy: number;
+  vx: number; vy: number;
   baseScale: number;
-  scaleFrom: number;
-  scaleTo: number;
-  elapsed: number;
-  maxLife: number;
-  dead: boolean;
+  scaleFrom: number; scaleTo: number;
+  elapsed: number; maxLife: number; dead: boolean;
 }
 
 export class Game {
@@ -46,8 +43,13 @@ export class Game {
   private textures: {
     explosionLarge: Texture; explosionMedium: Texture; explosionSmall: Texture;
     fireLarge: Texture; fireSmall: Texture;
-    cannonBall: Texture; ships: Texture[];
-    tileCannonPlatform: Texture; cannon: Texture; tileWater: Texture;
+    cannonBall: Texture; cannon: Texture; ships: Texture[];
+    tileCannonPlatform: Texture; tileWater: Texture;
+    healthFrame: Texture;
+    healthFillGreen: Texture; healthFillAmber: Texture; healthFillRed: Texture;
+    counterPanel: Texture;
+    enemyHealthFillGreen: Texture; enemyHealthFillRed: Texture;
+    iconHeart: Texture;
   };
 
   private player: Player | null = null;
@@ -57,9 +59,18 @@ export class Game {
   private islands: Rect[] = [];
   private wrecks: Wreck[] = [];
 
+  private enemyBars = new Map<string, HealthBar>();
+  private turretBars = new Map<string, HealthBar>();
+
+  // ---- Pixi HUD ----
+  private hudLayer: Container;
+  private playerBar: HealthBar | null = null;
+  private playerHpText: Text | null = null;
+  private scoreText: Text | null = null;
+  private timeText: Text | null = null;
+
   private aimGfx = new Map<string, Graphics>();
   private projectileAimGfx: Graphics;
-  private hpTexts = new Map<string, Text>();
 
   private keys: Record<string, boolean> = {};
 
@@ -84,6 +95,7 @@ export class Game {
     this.onEnd = onEnd;
     this.app = new Application();
     this.world = new Container();
+    this.hudLayer = new Container();
     this.projectileAimGfx = new Graphics();
 
     this.snapshot = {
@@ -105,12 +117,14 @@ export class Game {
     });
     this.host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.world);
+    this.app.stage.addChild(this.hudLayer);
 
     this.drawWater();
     this.spawnIslandsAndTurrets();
     this.spawnPlayer();
 
     this.world.addChild(this.projectileAimGfx);
+    this.createHud();
 
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
@@ -147,10 +161,10 @@ export class Game {
   // ---------- Input ----------
 
   private onKeyDown = (e: KeyboardEvent) => {
+    // Previne scroll da página com Espaço quando o jogo está ativo
+    if (e.key === ' ' || e.code === 'Space') e.preventDefault();
     this.keys[e.key] = true;
-    if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-      e.preventDefault();
-    }
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
   };
   private onKeyUp = (e: KeyboardEvent) => { this.keys[e.key] = false; };
   private onBlur = () => { if (!this.snapshot.ended) this.snapshot.paused = true; };
@@ -167,7 +181,6 @@ export class Game {
       height: C.arena.height,
     });
     this.world.addChild(bg);
-
     const border = new Graphics();
     border.rect(0, 0, C.arena.width, C.arena.height)
       .stroke({ width: 4, color: '#0a2440' });
@@ -224,15 +237,18 @@ export class Game {
 
   private spawnPlayer() {
     const spawn = { x: C.arena.width / 2, y: C.arena.height - 80 };
-    // Player SEMPRE usa ship_2.png (índice 1)
-    const shipIndex = SHIP_INDEX.playerShip;
-    const { container, ship, fires } = this.buildShipContainer(shipIndex, C.player.radius);
+    const shipIndex = SHIP_INDEX.playerHealthy;
+    const container = new Container();
+    const ship = new Sprite(this.textures.ships[shipIndex]);
+    ship.anchor.set(0.5);
+    this.fitSprite(ship, C.player.radius * 2.6);
+    container.addChild(ship);
     container.x = spawn.x;
     container.y = spawn.y;
     this.world.addChild(container);
 
     this.player = {
-      id: 1, gfx: container, ship, fires,
+      id: 1, gfx: container, ship, fires: [],
       x: container.x, y: container.y, radius: C.player.radius,
       hp: C.player.hp, maxHp: C.player.hp,
       rotation: 0,
@@ -241,7 +257,6 @@ export class Game {
       alive: true, shipIndex,
     };
 
-    this.ensureHpText('player-1', C.player.hp);
     this.ensureAimGfx('player-1');
   }
 
@@ -271,20 +286,27 @@ export class Game {
       attackTimer: Math.random() * C.turret.attackCooldown,
       islandIndex, cornerIndex, key,
     });
-    this.ensureHpText(key, C.turret.hp);
+
+    const bar = new HealthBar({
+      frame: this.textures.healthFrame,
+      green: this.textures.healthFillGreen,
+      amber: this.textures.healthFillAmber,
+      red: this.textures.healthFillRed,
+      targetWidth: C.healthBar.turretWidth,
+      greenThreshold: C.healthBar.greenThreshold,
+      amberThreshold: C.healthBar.amberThreshold,
+    });
+    bar.setPosition(x, y - r - C.healthBar.turretYOffset);
+    this.world.addChild(bar.container);
+    this.turretBars.set(key, bar);
+
     this.ensureAimGfx(key);
   }
 
   private spawnEnemy() {
     const kind = Math.random() < 0.55 ? 'chaser' : 'shooter';
     const spec = kind === 'chaser' ? C.chaser : C.shooter;
-
-    // Navio fixo por tipo:
-    //   chaser  → ship_3.png (índice 2)
-    //   shooter → ship_4.png (índice 3)
-    const shipIndex = kind === 'chaser'
-      ? SHIP_INDEX.chaserShip
-      : SHIP_INDEX.shooterShip;
+    const shipIndex = kind === 'chaser' ? SHIP_INDEX.chaserShip : SHIP_INDEX.shooterShip;
 
     let x = 0, y = 0, found = false;
     for (let i = 0; i < C.spawn.maxAttempts; i++) {
@@ -311,8 +333,97 @@ export class Game {
       shipIndex,
     };
     this.enemies.push(enemy);
-    this.ensureHpText(key, enemy.hp);
+
+    const bar = new HealthBar({
+      frame: this.textures.healthFrame,
+      green: this.textures.healthFillGreen,
+      amber: this.textures.healthFillAmber,
+      red: this.textures.healthFillRed,
+      targetWidth: C.healthBar.enemyWidth,
+      greenThreshold: C.healthBar.greenThreshold,
+      amberThreshold: C.healthBar.amberThreshold,
+    });
+    bar.setPosition(x, y - spec.radius - C.healthBar.enemyYOffset);
+    this.world.addChild(bar.container);
+    this.enemyBars.set(key, bar);
+
     this.ensureAimGfx(key);
+  }
+
+  // ---------- HUD (tudo em Pixi) ----------
+
+  private createHud() {
+    const m = C.healthBar.hudMargin;
+    const barW = C.healthBar.hudWidth;
+
+    // Container local do HUD esquerdo (barra + coração + número)
+    const left = new Container();
+    left.x = m;
+    left.y = m;
+    this.hudLayer.addChild(left);
+
+    // Barra do player — usando HealthBar genérico
+    this.playerBar = new HealthBar({
+      frame: this.textures.healthFrame,
+      green: this.textures.enemyHealthFillGreen,
+      amber: this.textures.enemyHealthFillGreen, // player só tem verde/vermelho
+      red: this.textures.enemyHealthFillRed,
+      targetWidth: barW,
+      greenThreshold: C.healthBar.playerRedThreshold, // >25% = verde
+      amberThreshold: C.healthBar.playerRedThreshold - 0.001, // praticamente desativa âmbar
+      hideOnZero: true,
+    });
+    // HealthBar é centralizado; para ancorar no canto esquerdo,
+    // posicionamos considerando metade da largura:
+    this.playerBar.setPosition(barW / 2, C.healthBar.hudHeight / 2);
+    left.addChild(this.playerBar.container);
+
+    const heart = new Sprite(this.textures.iconHeart);
+    heart.anchor.set(0.5, 0.5);
+    const heartSize = C.healthBar.hudHeight * 1.2;
+    const aspect = (heart.texture.width || 1) / (heart.texture.height || 1);
+    heart.height = heartSize;
+    heart.width = heartSize * aspect;
+    heart.x = 20;                                 
+    heart.y = C.healthBar.hudHeight / 2;       
+    left.addChild(heart);
+
+    this.playerHpText = new Text({ text: '100', style: HUD_STYLE });
+    this.playerHpText.anchor.set(0, 0.5);
+    this.playerHpText.x = barW + 2;              // antes era + 14
+    this.playerHpText.y = C.healthBar.hudHeight / 2;
+    this.playerHpText.style.fill = 0x35e06b;
+    left.addChild(this.playerHpText);
+
+    // Score e Time no canto superior direito
+    this.scoreText = new Text({ text: 'Score: 0', style: HUD_STYLE });
+    this.scoreText.anchor.set(1, 0);
+    this.timeText = new Text({ text: `Time: ${Math.ceil(this.snapshot.timeLeft)}s`, style: HUD_STYLE });
+    this.timeText.anchor.set(1, 0);
+  }
+
+  private layoutHud() {
+    const m = C.healthBar.hudMargin;
+    if (this.scoreText) {
+      this.scoreText.x = C.arena.width - m;
+      this.scoreText.y = m;
+    }
+    if (this.timeText) {
+      this.timeText.x = C.arena.width - m;
+      this.timeText.y = m + 30;
+    }
+  }
+
+  private updateHud() {
+    if (this.player && this.playerBar && this.playerHpText) {
+      const ratio = this.player.hp / this.player.maxHp;
+      this.playerBar.setRatio(ratio);
+      this.playerHpText.text = String(this.player.hp);
+      this.playerHpText.style.fill = ratio > C.healthBar.playerRedThreshold ? 0x35e06b : 0xff4040;
+      this.playerHpText.visible = ratio > 0;
+    }
+    if (this.scoreText) this.scoreText.text = `Score: ${this.snapshot.score}`;
+    if (this.timeText) this.timeText.text = `Time: ${Math.ceil(this.snapshot.timeLeft)}s`;
   }
 
   // ---------- Projectiles ----------
@@ -388,15 +499,20 @@ export class Game {
     }
 
     this.updateScheduled(dt);
-    if (this.player) this.updatePlayer(this.player, dt);
+    if (this.player) {
+      this.updatePlayer(this.player, dt);
+      this.updatePlayerShipSprite(this.player);
+      this.updateShipFires(this.player);
+    }
     this.updateEnemies(dt);
     this.updateTurrets(dt);
     this.updateProjectiles(dt);
     this.updateWrecks(dt);
     this.updateSpawns(dt);
-    this.updateShipFiresAll();
+    this.updateEnemyBars();
     this.updateAimPreviews();
-    this.updateHpTexts();
+    this.updateHud();
+    this.layoutHud();
   };
 
   private schedule(delay: number, action: () => void) {
@@ -440,7 +556,8 @@ export class Game {
     p.frontTimer -= dt;
     p.sideTimer -= dt;
 
-    const frontKey = k['2'];
+    // Tiro frontal agora na tecla ESPAÇO
+    const frontKey = k[' '] || k['Spacebar'];
     const leftKey  = k['q'] || k['Q'];
     const rightKey = k['e'] || k['E'];
     const chargeStep = dt / C.charge.maxTime;
@@ -464,6 +581,21 @@ export class Game {
     p.gfx.x = p.x; p.gfx.y = p.y; p.gfx.rotation = p.rotation;
   }
 
+  private updatePlayerShipSprite(p: Player) {
+    if (!p.alive) return;
+    const ratio = p.hp / p.maxHp;
+    let target: number;
+    if (ratio > 0.5)       target = SHIP_INDEX.playerHealthy;
+    else if (ratio > 0.15) target = SHIP_INDEX.playerDamaged;
+    else                   target = SHIP_INDEX.playerCritical;
+
+    if (p.shipIndex !== target) {
+      p.shipIndex = target;
+      p.ship.texture = this.textures.ships[target];
+      this.fitSprite(p.ship, C.player.radius * 2.6);
+    }
+  }
+
   private updateEnemies(dt: number) {
     for (const e of this.enemies) {
       if (!e.alive) continue;
@@ -483,18 +615,24 @@ export class Game {
             e.x += (dx / dist) * e.speed * dt;
             e.y += (dy / dist) * e.speed * dt;
           }
+
           e.attackTimer -= dt;
-
-          if (e.attackTimer > C.shooter.aimDuration) {
+          if (dist <= C.shooter.attackRange) {
+            // Mira sempre na posição ATUAL do player.
+            // No instante do disparo, a direção é congelada e o projétil
+            // percorre exatamente a distância até o player — se ele não se
+            // mover durante o voo, é atingido.
             e.aimDirection = Math.atan2(dy, dx);
-          }
-
-          if (dist <= C.shooter.attackRange && e.attackTimer <= 0) {
-            e.attackTimer = C.shooter.attackCooldown + Math.random() * C.shooter.cooldownJitter;
-            this.spawnProjectile('enemy', null,
-              e.x + Math.cos(e.aimDirection) * (e.radius + 4),
-              e.y + Math.sin(e.aimDirection) * (e.radius + 4),
-              e.aimDirection, C.shooter.projectileRange, C.projectile.enemyFlightTime);
+            if (e.attackTimer <= 0) {
+              e.attackTimer = C.shooter.attackCooldown + Math.random() * C.shooter.cooldownJitter;
+              const range = dist; // <-- dinâmico
+              this.spawnProjectile('enemy', null,
+                e.x + Math.cos(e.aimDirection) * (e.radius + 4),
+                e.y + Math.sin(e.aimDirection) * (e.radius + 4),
+                e.aimDirection, range, C.projectile.enemyFlightTime);
+            }
+          } else {
+            if (e.attackTimer < 0) e.attackTimer = 0;
           }
         }
       }
@@ -512,7 +650,6 @@ export class Game {
       }
 
       if (e.alive) {
-        // Guarda rotação final no campo `rotation` — usada pelo destroço.
         e.rotation = e.aimDirection + Math.PI / 2;
         e.gfx.x = e.x; e.gfx.y = e.y;
         e.gfx.rotation = e.rotation;
@@ -531,19 +668,21 @@ export class Game {
 
       t.attackTimer -= dt;
 
-      if (t.attackTimer > C.turret.aimDuration) {
+      if (dist <= C.turret.range) {
+        // Mesma regra: mira no player atual, range = distância
         t.aimDirection = Math.atan2(dy, dx);
+        if (t.attackTimer <= 0) {
+          t.attackTimer = C.turret.attackCooldown + Math.random() * C.turret.cooldownJitter;
+          this.spawnProjectile('enemy', null,
+            t.x + Math.cos(t.aimDirection) * (t.radius + 4),
+            t.y + Math.sin(t.aimDirection) * (t.radius + 4),
+            t.aimDirection, dist, C.projectile.enemyFlightTime,
+            C.turret.projectileDamage);
+        }
+      } else {
+        if (t.attackTimer < 0) t.attackTimer = 0;
       }
       t.gfx.rotation = t.aimDirection;
-
-      if (dist <= C.turret.range && t.attackTimer <= 0) {
-        t.attackTimer = C.turret.attackCooldown + Math.random() * C.turret.cooldownJitter;
-        this.spawnProjectile('enemy', null,
-          t.x + Math.cos(t.aimDirection) * (t.radius + 4),
-          t.y + Math.sin(t.aimDirection) * (t.radius + 4),
-          t.aimDirection, C.turret.projectileRange, C.projectile.enemyFlightTime,
-          C.turret.projectileDamage);
-      }
     }
   }
 
@@ -616,10 +755,7 @@ export class Game {
       const s = w.baseScale * (w.scaleFrom + (w.scaleTo - w.scaleFrom) * t);
       w.sprite.scale.set(s);
       w.sprite.alpha = 1 - t * 0.65;
-      if (t >= 1) {
-        w.dead = true;
-        w.sprite.destroy();
-      }
+      if (t >= 1) { w.dead = true; w.sprite.destroy(); }
     }
     this.wrecks = this.wrecks.filter(w => !w.dead);
   }
@@ -633,6 +769,21 @@ export class Game {
     if (this.spawnAccumulator >= interval) {
       this.spawnAccumulator = 0;
       this.spawnEnemy();
+    }
+  }
+
+  private updateEnemyBars() {
+    for (const e of this.enemies) {
+      const bar = this.enemyBars.get(e.key);
+      if (!bar) continue;
+      bar.setPosition(e.x, e.y - e.radius - C.healthBar.enemyYOffset);
+      bar.setRatio(e.hp / e.maxHp);
+    }
+    for (const t of this.turrets) {
+      const bar = this.turretBars.get(t.key);
+      if (!bar) continue;
+      bar.setPosition(t.x, t.y - t.radius - C.healthBar.turretYOffset);
+      bar.setRatio(t.hp / t.maxHp);
     }
   }
 
@@ -651,8 +802,10 @@ export class Game {
     if (t.hp <= 0 && t.alive) {
       t.alive = false;
       this.snapshot.score += 1;
-      this.hpTexts.get(t.key)?.destroy(); this.hpTexts.delete(t.key);
-      this.aimGfx.get(t.key)?.destroy(); this.aimGfx.delete(t.key);
+      this.turretBars.get(t.key)?.destroy();
+      this.turretBars.delete(t.key);
+      this.aimGfx.get(t.key)?.destroy();
+      this.aimGfx.delete(t.key);
       t.gfx.destroy();
     }
   }
@@ -668,26 +821,20 @@ export class Game {
     }
   }
 
-  /**
-   * Destrói inimigo. Se `byPlayer`, dispara a sequência:
-   * explosão média → explosão grande → naufrágio (1s, afundando) → some.
-   * Usa o navio-fantasma específico do tipo (chaser→ship_21, shooter→ship_22).
-   */
   private destroyEnemy(e: Enemy, byPlayer: boolean) {
     if (!e.alive) return;
     e.alive = false;
 
-    this.hpTexts.get(e.key)?.destroy(); this.hpTexts.delete(e.key);
-    this.aimGfx.get(e.key)?.destroy(); this.aimGfx.delete(e.key);
+    this.enemyBars.get(e.key)?.destroy();
+    this.enemyBars.delete(e.key);
+    this.aimGfx.get(e.key)?.destroy();
+    this.aimGfx.delete(e.key);
 
     const { x, y } = e;
-    // Usa a MESMA rotação que o navio tinha no último frame vivo.
     const finalRotation = e.rotation;
     const baseSize = e.radius * 2.6;
 
-    const wreckIndex = e.kind === 'chaser'
-      ? SHIP_INDEX.chaserWreck
-      : SHIP_INDEX.shooterWreck;
+    const wreckIndex = e.kind === 'chaser' ? SHIP_INDEX.chaserWreck : SHIP_INDEX.shooterWreck;
     const rotationOffset = e.kind === 'chaser'
       ? SHIP_ROTATION_OFFSET.chaserWreck
       : SHIP_ROTATION_OFFSET.shooterWreck;
@@ -705,7 +852,6 @@ export class Game {
 
     this.schedule(C.destruction.mediumExplosionDuration, () => {
       med.destroy();
-
       const lg = new Sprite(this.textures.explosionLarge);
       lg.anchor.set(0.5); lg.x = x; lg.y = y;
       this.fitSprite(lg, baseSize * 1.6);
@@ -713,7 +859,6 @@ export class Game {
 
       this.schedule(C.destruction.largeExplosionDuration, () => {
         lg.destroy();
-
         const wreck = new Sprite(this.textures.ships[wreckIndex]);
         wreck.anchor.set(0.5);
         wreck.x = x; wreck.y = y;
@@ -736,12 +881,10 @@ export class Game {
     });
   }
 
-  /** Player morre → troca o sprite para ship_20 e o mantém afundando. */
   private spawnPlayerWreck(p: Player) {
     const x = p.x, y = p.y;
     const finalRotation = p.rotation;
     p.ship.visible = false;
-    p.fires.forEach(f => f.visible = false);
 
     const wreck = new Sprite(this.textures.ships[SHIP_INDEX.playerWreck]);
     wreck.anchor.set(0.5);
@@ -775,15 +918,11 @@ export class Game {
     this.schedule(life, () => sprite.destroy());
   }
 
-  // ---------- Fires by HP ----------
-
-  private updateShipFiresAll() {
-    if (this.player) this.updateShipFires(this.player);
-    for (const e of this.enemies) this.updateShipFires(e);
-  }
+  // ---------- Fires (apenas inimigos) ----------
 
   private updateShipFires(entity: Entity) {
     if (!entity.alive) return;
+    if (entity.fires.length === 0) return;
     const ratio = entity.hp / entity.maxHp;
     let fires = 0;
     for (const t of C.damageStates) {
@@ -794,46 +933,14 @@ export class Game {
     }
   }
 
-  // ---------- HP text / aim previews ----------
+  // ---------- Aim previews ----------
 
-  private ensureHpText(key: string, initialHp: number) {
-    if (this.hpTexts.has(key)) return;
-    const t = new Text({ text: String(initialHp), style: HP_STYLE });
-    t.anchor.set(0.5);
-    this.world.addChild(t);
-    this.hpTexts.set(key, t);
-  }
   private ensureAimGfx(key: string) {
     if (this.aimGfx.has(key)) return this.aimGfx.get(key)!;
     const g = new Graphics();
     this.world.addChild(g);
     this.aimGfx.set(key, g);
     return g;
-  }
-
-  private updateHpTexts() {
-    if (this.player) {
-      const p = this.player;
-      const t = this.hpTexts.get('player-1');
-      if (t) {
-        t.text = `${p.hp}`;
-        t.x = p.x; t.y = p.y - p.radius - 12;
-        t.visible = p.alive;
-      }
-    }
-    for (const e of this.enemies) {
-      const t = this.hpTexts.get(e.key);
-      if (!t) continue;
-      t.text = `${e.hp}`;
-      t.x = e.x; t.y = e.y - e.radius - 10;
-    }
-    for (const t of this.turrets) {
-      const text = this.hpTexts.get(t.key);
-      if (!text) continue;
-      text.text = `${t.hp}`;
-      text.x = t.x; text.y = t.y - t.radius - 10;
-      text.visible = t.alive;
-    }
   }
 
   private projectileLandingPoint(p: Projectile): { x: number; y: number } {
@@ -876,6 +983,7 @@ export class Game {
       }
     }
 
+    // Shooters: mira acompanha o player até o instante do disparo
     for (const e of this.enemies) {
       const g = this.aimGfx.get(e.key);
       if (!g) continue;
@@ -887,7 +995,7 @@ export class Game {
       if (dist > C.shooter.attackRange) continue;
       if (e.attackTimer > C.shooter.aimDuration || e.attackTimer <= 0) continue;
       const progress = 1 - e.attackTimer / C.shooter.aimDuration;
-      const range = C.shooter.projectileRange * progress;
+      const range = dist * progress;
       this.drawAimMarker(g,
         e.x + Math.cos(e.aimDirection) * range,
         e.y + Math.sin(e.aimDirection) * range,
@@ -905,7 +1013,7 @@ export class Game {
       if (dist > C.turret.range) continue;
       if (t.attackTimer > C.turret.aimDuration || t.attackTimer <= 0) continue;
       const progress = 1 - t.attackTimer / C.turret.aimDuration;
-      const range = C.turret.projectileRange * progress;
+      const range = dist * progress;
       this.drawAimMarker(g,
         t.x + Math.cos(t.aimDirection) * range,
         t.y + Math.sin(t.aimDirection) * range,

@@ -24,7 +24,7 @@ export default function MainMenu({ onPlay, onOptions }: Props) {
           <li><b>W</b>: forward</li>
           <li><b>S</b>: backward</li>
           <li><b>A</b> / <b>D</b>: rotate</li>
-          <li><b>2</b> (hold): front shot</li>
+          <li><b>Space</b> (hold): front shot</li>
           <li><b>Q</b> (hold): left shot</li>
           <li><b>E</b> (hold): right shot</li>
         </ul>

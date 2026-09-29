@@ -23,33 +23,23 @@ export const GAME_CONFIG = {
     landingRadius: 10,
   },
 
-  charge: {
-    // Antes era 1.0 → mira crescia rápido demais.
-    // 1.4s deixa ~35% mais lento que a mira dos inimigos (aimDuration 1.0).
-    maxTime: 1.4,
-  },
+  charge: { maxTime: 1.4 },
 
   chaser: {
-    radius: 22.5,
-    hp: 12,
-    speed: 60,
-    contactDamage: 25,
+    radius: 22.5, hp: 12, speed: 60, contactDamage: 25,
   },
 
   shooter: {
-    radius: 22.5,
-    hp: 36,
-    speed: 45,
+    radius: 22.5, hp: 36, speed: 45,
     attackRange: 280,
     attackCooldown: 2.0,
     cooldownJitter: 0.25,
     aimDuration: 1.0,
-    projectileRange: 300,
+    projectileRange: 300, // ignorado — range é dinâmico (= distância no disparo)
   },
 
   turret: {
-    radius: 22.5,
-    hp: 24,
+    radius: 22.5, hp: 72,
     range: 320,
     attackCooldown: 2.0,
     cooldownJitter: 0.25,
@@ -59,18 +49,11 @@ export const GAME_CONFIG = {
   },
 
   spawn: {
-    baseInterval: 4.0,
-    minInterval: 2.0,
-    accelPerSec: 0.02,
-    minDistanceFromPlayer: 220,
-    maxAttempts: 12,
+    baseInterval: 4.0, minInterval: 2.0, accelPerSec: 0.02,
+    minDistanceFromPlayer: 220, maxAttempts: 12,
   },
 
-  session: {
-    minDuration: 60,
-    maxDuration: 180,
-    defaultDuration: 90,
-  },
+  session: { minDuration: 60, maxDuration: 180, defaultDuration: 90 },
 
   aim: {
     lineColor: 0xffe400,
@@ -88,9 +71,24 @@ export const GAME_CONFIG = {
     mediumExplosionDuration: 0.18,
     largeExplosionDuration: 0.28,
     wreckDuration: 1.0,
-    wreckDriftX: 14,
-    wreckDriftY: 9,
-    wreckScaleTo: 0.7,
+    wreckDriftX: 14, wreckDriftY: 9, wreckScaleTo: 0.7,
+  },
+
+  healthBar: {
+    // Inimigos / torretas
+    enemyWidth: 48,
+    enemyYOffset: 24,
+    turretWidth: 48,
+    turretYOffset: 24,
+    // Player HUD (canto superior esquerdo)
+    hudWidth: 200,
+    hudHeight: 48,
+    hudMargin: 16,
+    // Limiares (razão de HP)
+    greenThreshold: 0.5,      // inimigos/torretas: >50% verde
+    amberThreshold: 0.15,     // 15–50% âmbar, <15% vermelho
+    // Player: verde até 25%, vermelho de 25% a 1%, oculto em 0%
+    playerRedThreshold: 0.25,
   },
 } as const;
 
@@ -102,20 +100,19 @@ export const ISLANDS = [
 
 export const SHIP_COUNT = 24;
 
-// Índices 0-based = ship_(n+1).png
 export const SHIP_INDEX = {
-  playerShip:   1,    // ships/ship_2.png
-  playerWreck:  19,   // ships/ship_20.png
-  chaserShip:   2,    // ships/ship_3.png
-  chaserWreck:  20,   // ships/ship_21.png
-  shooterShip:  3,    // ships/ship_4.png
-  shooterWreck: 21,   // ships/ship_22.png
+  playerHealthy:  1,   // ship_2.png
+  playerDamaged:  7,   // ship_8.png
+  playerCritical: 13,  // ship_14.png
+  playerWreck:    19,  // ship_20.png
+
+  chaserShip:     2,   // ship_3.png
+  chaserWreck:    20,  // ship_21.png
+
+  shooterShip:    3,   // ship_4.png
+  shooterWreck:   21,  // ship_22.png
 } as const;
 
-// Offsets de rotação caso o sprite base do destroço aponte para uma direção
-// diferente do navio vivo. Deixe 0 se estiverem iguais.
 export const SHIP_ROTATION_OFFSET = {
-  playerWreck:  0,
-  chaserWreck:  0,
-  shooterWreck: 0,
+  playerWreck: 0, chaserWreck: 0, shooterWreck: 0,
 } as const;

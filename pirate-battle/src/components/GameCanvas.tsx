@@ -18,13 +18,6 @@ export default function GameCanvas({ runConfig, onEnd, onQuit }: Props) {
   const [progress, setProgress] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [hud, setHud] = useState<GameSnapshot>({
-    score: 0,
-    players: [{ id: 1, hp: 100, maxHp: 100 }],
-    timeLeft: runConfig.sessionTime,
-    running: true, paused: false, ended: false, endReason: null,
-  });
-
   useEffect(() => {
     let cancelled = false;
     setLoadError(null);
@@ -51,12 +44,6 @@ export default function GameCanvas({ runConfig, onEnd, onQuit }: Props) {
 
     game.init().catch((err) => console.error('Failed to init game', err));
 
-    const interval = window.setInterval(() => {
-      const g = gameRef.current;
-      if (!g) return;
-      setHud(g.getSnapshot());
-    }, 200);
-
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
         gameRef.current?.togglePause();
@@ -66,7 +53,6 @@ export default function GameCanvas({ runConfig, onEnd, onQuit }: Props) {
 
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
       window.removeEventListener('keydown', onKey);
       game.destroy();
       gameRef.current = null;
@@ -92,16 +78,8 @@ export default function GameCanvas({ runConfig, onEnd, onQuit }: Props) {
 
   return (
     <div className="game-screen">
-      <div className="hud" aria-live="polite">
-        <span>Score: {hud.score}</span>
-        {hud.players.map((p) => (
-          <span key={p.id} className={`hp hp-p${p.id}`}>HP: {p.hp}</span>
-        ))}
-        <span>Time: {Math.ceil(hud.timeLeft)}s</span>
-        {hud.paused && <span className="paused">PAUSED - press P to resume</span>}
-        <button className="quit-inline" onClick={onQuit}>Quit</button>
-      </div>
       <div className="arena-host" ref={hostRef} />
+      <button className="quit-floating" onClick={onQuit} aria-label="Quit">Quit</button>
     </div>
   );
 }
