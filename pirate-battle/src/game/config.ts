@@ -105,8 +105,8 @@ export const ISLAND_SPECS: IslandSpec[] = [
     wFrac: 0.40,
     textureKey: 'island1',
     turrets: [
-      { xFrac: 0.58, yFrac: 0.55 },
-      { xFrac: 0.92, yFrac: 0.55 },
+      { xFrac: 0.565, yFrac: 0.55 },
+      { xFrac: 0.925, yFrac: 0.55 },
     ],
   },
   {
