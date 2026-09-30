@@ -128,10 +128,10 @@ export const ISLAND_SPECS: IslandSpec[] = [
     ],
     collision: {
       xFrac: 0.00,
-      yFrac: 0.5,
+      yFrac: 0.00,   // <-- cobre desde o topo
       wFrac: 1.00,
-      hFrac: 0.55,
-      cornerRadiusFrac: 0.30,
+      hFrac: 1.00,   // <-- até o fundo
+      cornerRadiusFrac: 0.20,
     },
   },
   {
@@ -146,10 +146,10 @@ export const ISLAND_SPECS: IslandSpec[] = [
     ],
     collision: {
       xFrac: 0.00,
-      yFrac: 0.05,
+      yFrac: 0.00,
       wFrac: 1.00,
-      hFrac: 0.55,
-      cornerRadiusFrac: 0.15,
+      hFrac: 1.00,
+      cornerRadiusFrac: 0.20,
     },
   },
 ];
