@@ -35,7 +35,8 @@ export const GAME_CONFIG = {
     attackCooldown: 2.0,
     cooldownJitter: 0.25,
     aimDuration: 1.0,
-    projectileRange: 300, // ignorado — range é dinâmico (= distância no disparo)
+    projectileRange: 300,
+    contactDamage: 10,
   },
 
   turret: {
@@ -75,42 +76,47 @@ export const GAME_CONFIG = {
   },
 
   healthBar: {
-    // Inimigos / torretas
     enemyWidth: 48,
     enemyYOffset: 24,
     turretWidth: 48,
     turretYOffset: 24,
-    // Player HUD (canto superior esquerdo)
     hudWidth: 200,
     hudHeight: 48,
     hudMargin: 16,
-    // Limiares (razão de HP)
-    greenThreshold: 0.5,      // inimigos/torretas: >50% verde
-    amberThreshold: 0.15,     // 15–50% âmbar, <15% vermelho
-    // Player: verde até 25%, vermelho de 25% a 1%, oculto em 0%
+    greenThreshold: 0.5,
+    amberThreshold: 0.15,
     playerRedThreshold: 0.25,
   },
-} as const;
+};
 
-export const ISLANDS = [
-  { x: 180, y: 140, w: 160, h: 120 },
-  { x: 620, y: 380, w: 180, h: 140 },
-  { x: 400, y: 260, w: 120, h: 90 },
+export const ISLAND_FRACTIONS = [
+  { x: 0.2000, y: 0.2333, w: 0.1778, h: 0.2000 },
+  { x: 0.6889, y: 0.6333, w: 0.2000, h: 0.2333 },
+  { x: 0.4444, y: 0.4333, w: 0.1333, h: 0.1500 },
 ] as const;
+
+export function getIslands(arenaW: number, arenaH: number) {
+  return ISLAND_FRACTIONS.map(f => ({
+    x: f.x * arenaW,
+    y: f.y * arenaH,
+    w: f.w * arenaW,
+    h: f.h * arenaH,
+  }));
+}
 
 export const SHIP_COUNT = 24;
 
 export const SHIP_INDEX = {
-  playerHealthy:  1,   // ship_2.png
-  playerDamaged:  7,   // ship_8.png
-  playerCritical: 13,  // ship_14.png
-  playerWreck:    19,  // ship_20.png
+  playerHealthy:  1,
+  playerDamaged:  7,
+  playerCritical: 13,
+  playerWreck:    19,
 
-  chaserShip:     2,   // ship_3.png
-  chaserWreck:    20,  // ship_21.png
+  chaserShip:     2,
+  chaserWreck:    20,
 
-  shooterShip:    3,   // ship_4.png
-  shooterWreck:   21,  // ship_22.png
+  shooterShip:    3,
+  shooterWreck:   21,
 } as const;
 
 export const SHIP_ROTATION_OFFSET = {

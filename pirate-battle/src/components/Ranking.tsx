@@ -5,6 +5,12 @@ import Pagination from './Pagination';
 
 const PAGE_SIZE = 5;
 
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 export default function Ranking() {
   const [page, setPage] = useState(1);
   const { data, isLoading, isError, isFetching } = useQuery({
@@ -24,7 +30,7 @@ export default function Ranking() {
       {items.length === 0 ? (
         <p>No records yet.</p>
       ) : (
-        <table className="data-table">
+        <table className="data-table ranking-table">
           <thead>
             <tr>
               <th>Rank</th>
@@ -39,7 +45,7 @@ export default function Ranking() {
                 <td>{(page - 1) * PAGE_SIZE + i + 1}</td>
                 <td>{r.playerName}</td>
                 <td>{r.score}</td>
-                <td>{new Date(r.createdAt).toLocaleString()}</td>
+                <td>{fmtDate(r.createdAt)}</td>
               </tr>
             ))}
           </tbody>

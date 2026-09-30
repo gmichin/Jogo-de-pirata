@@ -24,7 +24,7 @@ export default function MainMenu({ onPlay, onOptions }: Props) {
           className="title-image"
         />
 
-        <div className="menu-panel">
+        <div className={`menu-panel ${tab !== 'main' ? 'tab-view' : ''}`}>
           {tab === 'main' ? (
             <>
               <button className="btn-primary" onClick={onPlay}>Play</button>

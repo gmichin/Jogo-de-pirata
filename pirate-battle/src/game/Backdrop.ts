@@ -1,5 +1,5 @@
 import { Application, Container, Graphics, Texture, TilingSprite } from 'pixi.js';
-import { GAME_CONFIG as C, ISLANDS } from './config';
+import { getIslands } from './config';
 
 /**
  * Cena de fundo: apenas água + ilhas + borda.
@@ -18,10 +18,13 @@ export class Backdrop {
   }
 
   async init() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
     await this.app.init({
       background: '#0b2a45',
-      width: C.arena.width,
-      height: C.arena.height,
+      width: w,
+      height: h,
       antialias: true,
       resolution: window.devicePixelRatio || 1,
       autoDensity: true,
@@ -33,12 +36,12 @@ export class Backdrop {
 
     const bg = new TilingSprite({
       texture: this.water,
-      width: C.arena.width,
-      height: C.arena.height,
+      width: w,
+      height: h,
     });
     world.addChild(bg);
 
-    for (const isl of ISLANDS) {
+    for (const isl of getIslands(w, h)) {
       const g = new Graphics();
       g.rect(isl.x, isl.y, isl.w, isl.h)
         .fill('#c9b27a').stroke({ width: 4, color: '#6f5a2a' });
@@ -46,7 +49,7 @@ export class Backdrop {
     }
 
     const border = new Graphics();
-    border.rect(0, 0, C.arena.width, C.arena.height)
+    border.rect(0, 0, w, h)
       .stroke({ width: 4, color: '#0a2440' });
     world.addChild(border);
   }

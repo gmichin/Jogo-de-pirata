@@ -5,6 +5,12 @@ import Pagination from './Pagination';
 
 const PAGE_SIZE = 5;
 
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 export default function MatchHistory() {
   const [page, setPage] = useState(1);
   const { data, isLoading, isError, isFetching } = useQuery({
@@ -24,7 +30,7 @@ export default function MatchHistory() {
       {items.length === 0 ? (
         <p>No matches yet.</p>
       ) : (
-        <table className="data-table">
+        <table className="data-table history-table">
           <thead>
             <tr>
               <th>Date</th>
@@ -36,7 +42,7 @@ export default function MatchHistory() {
           <tbody>
             {items.map((r) => (
               <tr key={r.id}>
-                <td>{new Date(r.createdAt).toLocaleString()}</td>
+                <td>{fmtDate(r.createdAt)}</td>
                 <td>{r.score}</td>
                 <td>{r.durationSec}s</td>
                 <td>{r.endReason === 'time' ? 'Time Up' : 'Defeated'}</td>

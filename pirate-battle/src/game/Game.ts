@@ -1,7 +1,7 @@
 import {
   Application, Container, Graphics, Rectangle, Sprite, Text, TextStyle, Texture, TilingSprite,
 } from 'pixi.js';
-import { GAME_CONFIG as C, ISLANDS, SHIP_INDEX, SHIP_ROTATION_OFFSET } from './config';
+import { GAME_CONFIG as C, getIslands, SHIP_INDEX, SHIP_ROTATION_OFFSET } from './config';
 import { HealthBar } from './HealthBar';
 import type {
   Enemy, Entity, GameSnapshot, Player, PlayerId,
@@ -67,6 +67,9 @@ export class Game {
   private onQuit: () => void;
   private onRestart: () => void;
 
+  private arenaW = C.arena.width;
+  private arenaH = C.arena.height;
+
   private textures: {
     explosionLarge: Texture; explosionMedium: Texture; explosionSmall: Texture;
     fireLarge: Texture; fireSmall: Texture;
@@ -95,14 +98,12 @@ export class Game {
   private enemyBars = new Map<string, HealthBar>();
   private turretBars = new Map<string, HealthBar>();
 
-  // HUD
   private playerBar: HealthBar | null = null;
   private playerHpText: Text | null = null;
   private scoreText: Text | null = null;
   private timeText: Text | null = null;
   private pauseButton: Container | null = null;
 
-  // Menu
   private pauseMenu: Container | null = null;
   private menuMode: 'pause' | 'death' | null = null;
 
@@ -149,10 +150,15 @@ export class Game {
   }
 
   async init() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    this.arenaW = w;
+    this.arenaH = h;
+
     await this.app.init({
       background: '#0b2a45',
-      width: C.arena.width,
-      height: C.arena.height,
+      width: w,
+      height: h,
       antialias: true,
       resolution: window.devicePixelRatio || 1,
       autoDensity: true,
@@ -194,7 +200,6 @@ export class Game {
     return { ...this.snapshot, players: this.snapshot.players.map(p => ({ ...p })) };
   }
 
-  /** Alterna pausa via tecla (P/Esc). Abre/fecha o menu de pausa. */
   togglePause() {
     if (this.menuMode === 'death' || this.ended) return;
     if (this.menuMode === 'pause') this.closeMenu();
@@ -222,19 +227,20 @@ export class Game {
   private drawWater() {
     const bg = new TilingSprite({
       texture: this.textures.tileWater,
-      width: C.arena.width,
-      height: C.arena.height,
+      width: this.arenaW,
+      height: this.arenaH,
     });
     this.world.addChild(bg);
     const border = new Graphics();
-    border.rect(0, 0, C.arena.width, C.arena.height)
+    border.rect(0, 0, this.arenaW, this.arenaH)
       .stroke({ width: 4, color: '#0a2440' });
     this.world.addChild(border);
   }
 
   private spawnIslandsAndTurrets() {
-    for (let i = 0; i < ISLANDS.length; i++) {
-      const isl = ISLANDS[i];
+    const islands = getIslands(this.arenaW, this.arenaH);
+    for (let i = 0; i < islands.length; i++) {
+      const isl = islands[i];
       this.islands.push({ ...isl });
 
       const g = new Graphics();
@@ -287,7 +293,7 @@ export class Game {
   }
 
   private spawnPlayer() {
-    const spawn = { x: C.arena.width / 2, y: C.arena.height - 80 };
+    const spawn = { x: this.arenaW / 2, y: this.arenaH - 80 };
     const shipIndex = SHIP_INDEX.playerHealthy;
     const container = new Container();
     const ship = new Sprite(this.textures.ships[shipIndex]);
@@ -361,8 +367,8 @@ export class Game {
 
     let x = 0, y = 0, found = false;
     for (let i = 0; i < C.spawn.maxAttempts; i++) {
-      x = 40 + Math.random() * (C.arena.width - 80);
-      y = 40 + Math.random() * (C.arena.height - 80);
+      x = 40 + Math.random() * Math.max(40, this.arenaW - 80);
+      y = 40 + Math.random() * Math.max(40, this.arenaH - 80);
       if (this.minDistanceToPlayer(x, y) < C.spawn.minDistanceFromPlayer) continue;
       if (this.isInsideAnyIsland(x, y, spec.radius + 10)) continue;
       found = true; break;
@@ -407,7 +413,6 @@ export class Game {
     const m = C.healthBar.hudMargin;
     const barW = C.healthBar.hudWidth;
 
-    // ---- Barra do player (canto superior esquerdo) ----
     const left = new Container();
     left.x = m;
     left.y = m;
@@ -426,37 +431,27 @@ export class Game {
     this.playerBar.setPosition(barW / 2, C.healthBar.hudHeight / 2);
     left.addChild(this.playerBar.container);
 
-    const heart = new Sprite(this.textures.iconHeart);
-    heart.anchor.set(0.5, 0.5);
-    const heartSize = C.healthBar.hudHeight * 0.9;
-    const aspect = (heart.texture.width || 1) / (heart.texture.height || 1);
-    heart.height = heartSize;
-    heart.width = heartSize * aspect;
-    heart.x = 6;
-    heart.y = C.healthBar.hudHeight / 2;
-    left.addChild(heart);
+    // ícone de coração removido
 
     this.playerHpText = new Text({ text: '100', style: HUD_STYLE });
     this.playerHpText.anchor.set(0, 0.5);
-    this.playerHpText.x = barW + 2;
+    this.playerHpText.x = barW + 8;
     this.playerHpText.y = C.healthBar.hudHeight / 2;
     this.playerHpText.style.fill = 0x35e06b;
     left.addChild(this.playerHpText);
 
-    // Score abaixo da barra de HP
     this.scoreText = new Text({ text: 'Score: 0', style: HUD_STYLE });
     this.scoreText.anchor.set(0, 0);
     this.scoreText.x = m;
     this.scoreText.y = m + C.healthBar.hudHeight + 6;
     this.hudLayer.addChild(this.scoreText);
 
-    // ---- Timer (topo central) ----
     const panelH = 44;
     const panelW = 110;
     const gap = 6;
     const iconSize = 34;
     const totalW = iconSize + gap + panelW;
-    const startX = C.arena.width / 2 - totalW / 2;
+    const startX = this.arenaW / 2 - totalW / 2;
 
     const icon = new Sprite(this.textures.iconTime);
     icon.anchor.set(0.5);
@@ -478,7 +473,6 @@ export class Game {
     this.timeText.y = panel.y;
     this.hudLayer.addChild(this.timeText);
 
-    // ---- Botão de pause (topo direito) ----
     this.createPauseButton();
   }
 
@@ -486,7 +480,7 @@ export class Game {
     const m = C.healthBar.hudMargin;
     const size = 48;
     const c = new Container();
-    c.x = C.arena.width - m - size / 2;
+    c.x = this.arenaW - m - size / 2;
     c.y = m + size / 2;
     this.hudLayer.addChild(c);
     this.pauseButton = c;
@@ -538,15 +532,14 @@ export class Game {
     this.pauseMenu = layer;
     this.menuLayer.addChild(layer);
 
-    // Overlay escuro bloqueando cliques abaixo
     const overlay = new Graphics();
-    overlay.rect(0, 0, C.arena.width, C.arena.height).fill({ color: 0x000000, alpha: 0.55 });
+    overlay.rect(0, 0, this.arenaW, this.arenaH).fill({ color: 0x000000, alpha: 0.55 });
     overlay.eventMode = 'static';
-    overlay.hitArea = new Rectangle(0, 0, C.arena.width, C.arena.height);
+    overlay.hitArea = new Rectangle(0, 0, this.arenaW, this.arenaH);
     layer.addChild(overlay);
 
-    const cx = C.arena.width / 2;
-    const cy = C.arena.height / 2;
+    const cx = this.arenaW / 2;
+    const cy = this.arenaH / 2;
 
     const panelW = 380;
     const panelH = mode === 'pause' ? 380 : 320;
@@ -716,8 +709,8 @@ export class Game {
 
   private update = () => {
     if (this.destroyed) return;
-    if (this.ended) return;             // time expirou → App já vai trocar de tela
-    if (this.menuMode !== null) return; // menu aberto → congela simulação
+    if (this.ended) return;
+    if (this.menuMode !== null) return;
     if (!this.snapshot.running || this.snapshot.paused) return;
 
     const dt = this.app.ticker.deltaMS / 1000;
@@ -780,8 +773,8 @@ export class Game {
       p.y -= Math.sin(dir) * C.player.speed * 0.6 * dt;
     }
 
-    p.x = Math.max(p.radius, Math.min(C.arena.width - p.radius, p.x));
-    p.y = Math.max(p.radius, Math.min(C.arena.height - p.radius, p.y));
+    p.x = Math.max(p.radius, Math.min(this.arenaW - p.radius, p.x));
+    p.y = Math.max(p.radius, Math.min(this.arenaH - p.radius, p.y));
     this.resolveIslandCollisionEntity(p);
 
     p.frontTimer -= dt;
@@ -861,16 +854,16 @@ export class Game {
         }
       }
 
-      e.x = Math.max(e.radius, Math.min(C.arena.width - e.radius, e.x));
-      e.y = Math.max(e.radius, Math.min(C.arena.height - e.radius, e.y));
+      e.x = Math.max(e.radius, Math.min(this.arenaW - e.radius, e.x));
+      e.y = Math.max(e.radius, Math.min(this.arenaH - e.radius, e.y));
       this.resolveIslandCollisionEntity(e);
 
-      if (e.kind === 'chaser' && target) {
-        if (Math.hypot(e.x - target.x, e.y - target.y) < e.radius + target.radius) {
-          this.spawnExplosion(e.x, e.y, 'small');
-          this.destroyEnemy(e, false);
-          this.damagePlayer(target, C.chaser.contactDamage);
-        }
+      // Contato com o player: chaser e shooter morrem ao encostar
+      if (target && Math.hypot(e.x - target.x, e.y - target.y) < e.radius + target.radius) {
+        const dmg = e.kind === 'chaser' ? C.chaser.contactDamage : C.shooter.contactDamage;
+        this.spawnExplosion(e.x, e.y, 'small');
+        this.destroyEnemy(e, false);
+        this.damagePlayer(target, dmg);
       }
 
       if (e.alive) {
@@ -931,7 +924,7 @@ export class Game {
         continue;
       }
 
-      if (p.x < -80 || p.y < -80 || p.x > C.arena.width + 80 || p.y > C.arena.height + 80) {
+      if (p.x < -80 || p.y < -80 || p.x > this.arenaW + 80 || p.y > this.arenaH + 80) {
         p.alive = false;
         p.gfx.destroy();
       }
@@ -1070,14 +1063,14 @@ export class Game {
 
     const med = new Sprite(this.textures.explosionMedium);
     med.anchor.set(0.5); med.x = x; med.y = y;
-    this.fitSprite(med, baseSize * 1.2);
+    this.fitSprite(med, baseSize * 1.0);
     this.world.addChild(med);
 
     this.schedule(C.destruction.mediumExplosionDuration, () => {
       med.destroy();
       const lg = new Sprite(this.textures.explosionLarge);
       lg.anchor.set(0.5); lg.x = x; lg.y = y;
-      this.fitSprite(lg, baseSize * 1.6);
+      this.fitSprite(lg, baseSize * 1.3);
       this.world.addChild(lg);
 
       this.schedule(C.destruction.largeExplosionDuration, () => {
@@ -1135,7 +1128,7 @@ export class Game {
              : this.textures.explosionLarge;
     const sprite = new Sprite(tex);
     sprite.anchor.set(0.5); sprite.x = x; sprite.y = y;
-    this.fitSprite(sprite, 40);
+    this.fitSprite(sprite, 30);
     this.world.addChild(sprite);
     const life = kind === 'small' ? 0.18 : kind === 'medium' ? 0.25 : 0.35;
     this.schedule(life, () => sprite.destroy());
@@ -1284,7 +1277,6 @@ export class Game {
       y >= i.y - padding && y <= i.y + i.h + padding);
   }
 
-  /** Fim por tempo — notifica o App (tela de resultado). */
   private end(reason: 'time' | 'death') {
     if (this.ended) return;
     this.ended = true;
@@ -1293,8 +1285,7 @@ export class Game {
     this.snapshot.endReason = reason;
     this.onEnd(this.getSnapshot());
   }
-  
-  /** Morte do jogador — delega para o App (tela de morte com Ranking/História). */
+
   private die() {
     if (this.ended) return;
     this.end('death');
