@@ -89,30 +89,12 @@ export const GAME_CONFIG = {
   },
 };
 
-/**
- * Área de colisão de uma ilha (frações locais da imagem).
- *
- *  - `cornerRadiusFrac` (opcional) arredonda os cantos do retângulo.
- *    É uma fração da LARGURA DA IMAGEM (não do rect). Ex.: com uma imagem
- *    de 400px de largura e `cornerRadiusFrac: 0.15`, cada canto vira um
- *    arco de raio 60px. Use 0 ou omita para cantos quadrados.
- */
-export interface IslandCollision {
-  xFrac: number;
-  yFrac: number;
-  wFrac: number;
-  hFrac: number;
-  /** Raio dos cantos, em fração da largura da imagem. 0 = quadrado. */
-  cornerRadiusFrac?: number;
-}
-
 export interface IslandSpec {
   xFrac: number;
   yFrac: number;
   wFrac: number;
   textureKey: 'island1' | 'island2';
   turrets: { xFrac: number; yFrac: number }[];
-  collision?: IslandCollision;
 }
 
 export const ISLAND_SPECS: IslandSpec[] = [
@@ -126,13 +108,6 @@ export const ISLAND_SPECS: IslandSpec[] = [
       { xFrac: 0.58, yFrac: 0.55 },
       { xFrac: 0.92, yFrac: 0.55 },
     ],
-    collision: {
-      xFrac: 0.00,
-      yFrac: 0.00,   // <-- cobre desde o topo
-      wFrac: 1.00,
-      hFrac: 1.00,   // <-- até o fundo
-      cornerRadiusFrac: 0.20,
-    },
   },
   {
     // Ilha 2 — canto inferior direito.
@@ -144,13 +119,6 @@ export const ISLAND_SPECS: IslandSpec[] = [
       { xFrac: 0.11, yFrac: 0.47 },
       { xFrac: 0.62, yFrac: 0.47 },
     ],
-    collision: {
-      xFrac: 0.00,
-      yFrac: 0.00,
-      wFrac: 1.00,
-      hFrac: 1.00,
-      cornerRadiusFrac: 0.20,
-    },
   },
 ];
 
