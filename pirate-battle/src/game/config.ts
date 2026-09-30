@@ -89,40 +89,25 @@ export const GAME_CONFIG = {
   },
 };
 
-/**
- * Especificação de uma ilha.
- *
- * IMPORTANTE — a proporção ORIGINAL da imagem é sempre preservada:
- *   - `wFrac` define apenas a LARGURA (fração da largura da arena).
- *   - A ALTURA é calculada automaticamente a partir do aspect ratio real da
- *     textura (altura ÷ largura). Assim a imagem nunca fica esticada.
- *
- * Posição:
- *   - `xFrac` / `yFrac` são o canto SUPERIOR-ESQUERDO em frações da arena.
- *     Ex.: `xFrac: 0` → encosta na esquerda; `yFrac: 0` → encosta no topo.
- *
- * Torretas:
- *   - `turrets[]` são posições em frações LOCAIS da própria imagem.
- *     0,0 = canto sup-esq da imagem; 1,1 = canto inf-dir.
- *
- * Colisão:
- *   - A colisão é a ÁREA INTEIRA da imagem (o barco não passa em lugar
- *     nenhum que tenha sprite; só os tiros atravessam).
- *
- * Dica: aperte **K** dentro do jogo para ver a colisão (vermelho) e as
- * torretas (amarelo).
- */
+export interface IslandCollision {
+  xFrac: number;
+  yFrac: number;
+  wFrac: number;
+  hFrac: number;
+}
+
 export interface IslandSpec {
   xFrac: number;
   yFrac: number;
   wFrac: number;
   textureKey: 'island1' | 'island2';
   turrets: { xFrac: number; yFrac: number }[];
+  collision?: IslandCollision;
 }
 
 export const ISLAND_SPECS: IslandSpec[] = [
   {
-    // Ilha 1 — canto superior esquerdo
+    // Ilha 1 — canto superior esquerdo.
     xFrac: -0.02,
     yFrac: -0.02,
     wFrac: 0.40,
@@ -131,11 +116,9 @@ export const ISLAND_SPECS: IslandSpec[] = [
       { xFrac: 0.58, yFrac: 0.55 },
       { xFrac: 0.92, yFrac: 0.55 },
     ],
+    collision: { xFrac: 0.00, yFrac: 0.5, wFrac: 1.00, hFrac: 0.55 },
   },
   {
-    // Ilha 2 — canto inferior direito
-    // Obs.: como a ALTURA depende do aspect ratio da imagem, o `yFrac`
-    // pode não deixar a ilha exatamente colada no fundo — ajuste com K.
     xFrac: 0.60,
     yFrac: 0.55,
     wFrac: 0.40,
@@ -144,6 +127,7 @@ export const ISLAND_SPECS: IslandSpec[] = [
       { xFrac: 0.11, yFrac: 0.47 },
       { xFrac: 0.62, yFrac: 0.47 },
     ],
+    collision: { xFrac: 0.00, yFrac: 0.05, wFrac: 1.00, hFrac: 0.55 },
   },
 ];
 

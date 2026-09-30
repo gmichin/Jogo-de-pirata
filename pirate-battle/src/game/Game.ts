@@ -98,7 +98,6 @@ export class Game {
   private turrets: Turret[] = [];
   private projectiles: Projectile[] = [];
 
-  /** Rects sólidos (imagem inteira das ilhas). Barcos não atravessam. */
   private islands: Rect[] = [];
 
   private wrecks: Wreck[] = [];
@@ -251,12 +250,6 @@ export class Game {
     this.world.addChild(border);
   }
 
-  /**
-   * Desenha as ilhas mantendo a PROPORÇÃO ORIGINAL de cada imagem:
-   *  - `wFrac` define a largura.
-   *  - altura = largura × (alturaOriginal / larguraOriginal).
-   * A colisão é a imagem INTEIRA — o barco não atravessa em pixel algum.
-   */
   private spawnIslandsAndTurrets() {
     for (let i = 0; i < ISLAND_SPECS.length; i++) {
       const spec = ISLAND_SPECS[i];
@@ -264,13 +257,13 @@ export class Game {
         ? this.textures.island1
         : this.textures.island2;
 
-      // Dimensões do sprite (mantendo proporção da textura).
+      // Dimensões do sprite (mantendo a proporção da textura).
       const iw = spec.wFrac * this.arenaW;
       const texW = tex.width || 1;
       const texH = tex.height || 1;
       const ih = iw * (texH / texW);
 
-      // Posição do canto superior esquerdo na arena.
+      // Posição do canto superior-esquerdo na arena.
       const ix = spec.xFrac * this.arenaW;
       const iy = spec.yFrac * this.arenaH;
 
@@ -282,10 +275,16 @@ export class Game {
       sprite.height = ih;
       this.world.addChild(sprite);
 
-      // Colisão = área INTEIRA da imagem.
-      this.islands.push({ x: ix, y: iy, w: iw, h: ih });
+      // Colisão: usa `spec.collision` se definido; senão, imagem inteira.
+      const col = spec.collision ?? { xFrac: 0, yFrac: 0, wFrac: 1, hFrac: 1 };
+      this.islands.push({
+        x: ix + col.xFrac * iw,
+        y: iy + col.yFrac * ih,
+        w: col.wFrac * iw,
+        h: col.hFrac * ih,
+      });
 
-      // Torretas.
+      // Torretas (frações locais da imagem inteira).
       for (let t = 0; t < spec.turrets.length; t++) {
         const tx = ix + spec.turrets[t].xFrac * iw;
         const ty = iy + spec.turrets[t].yFrac * ih;
