@@ -83,4 +83,5 @@ export interface RunConfig {
   sessionTime: number;
   spawnInterval: number;
   shipIndex: number;
+  playerName: string;
 }

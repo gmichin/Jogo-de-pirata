@@ -1293,12 +1293,10 @@ export class Game {
     this.snapshot.endReason = reason;
     this.onEnd(this.getSnapshot());
   }
-
-  /** Morte do jogador — apenas mostra o menu de morte, sem ir ao Result. */
+  
+  /** Morte do jogador — delega para o App (tela de morte com Ranking/História). */
   private die() {
-    if (this.menuMode === 'death') return;
-    this.snapshot.running = false;
-    this.snapshot.endReason = 'death';
-    this.openMenu('death');
+    if (this.ended) return;
+    this.end('death');
   }
 }

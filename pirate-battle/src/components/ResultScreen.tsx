@@ -15,11 +15,14 @@ export default function ResultScreen({ snapshot, runConfig, onPlayAgain, onMenu 
     mutationFn: () =>
       submitMatch({
         playerId: 'local',
-        playerName: 'You',
+        playerName: runConfig.playerName,
         score: snapshot.score,
-        durationSec: runConfig.sessionTime - Math.ceil(snapshot.timeLeft),
+        durationSec: Math.round(runConfig.sessionTime - snapshot.timeLeft),
         endReason: snapshot.endReason === 'time' ? 'time' : 'death',
-        config: runConfig,
+        config: {
+          sessionTime: runConfig.sessionTime,
+          spawnInterval: runConfig.spawnInterval,
+        },
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ranking'] });
@@ -35,19 +38,22 @@ export default function ResultScreen({ snapshot, runConfig, onPlayAgain, onMenu 
       <p>Reason: {snapshot.endReason}</p>
 
       {!mutation.isSuccess && !mutation.isPending && (
-        <button onClick={() => mutation.mutate()}>Submit to ranking</button>
+        <button className="btn-primary" onClick={() => mutation.mutate()}>
+          Submit to ranking
+        </button>
       )}
       {mutation.isPending && <p>Submitting…</p>}
       {mutation.isSuccess && <p>Recorded!</p>}
       {mutation.isError && (
         <p className="error">
-          Failed to submit. <button onClick={() => mutation.mutate()}>Retry</button>
+          Failed to submit.{' '}
+          <button className="btn-primary" onClick={() => mutation.mutate()}>Retry</button>
         </p>
       )}
 
       <div className="result-actions">
-        <button onClick={onPlayAgain}>Play Again</button>
-        <button onClick={onMenu}>Main Menu</button>
+        <button className="btn-primary" onClick={onPlayAgain}>Play Again</button>
+        <button className="btn-primary" onClick={onMenu}>Main Menu</button>
       </div>
     </div>
   );

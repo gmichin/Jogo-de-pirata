@@ -3,10 +3,11 @@ import MainMenu from './components/MainMenu';
 import Options from './components/Options';
 import GameCanvas from './components/GameCanvas';
 import ResultScreen from './components/ResultScreen';
+import DeathScreen from './components/DeathScreen';
 import { loadOptions, saveLastResult } from './storage';
 import type { GameSnapshot, RunConfig } from './game/types';
 
-type Screen = 'menu' | 'options' | 'game' | 'result';
+type Screen = 'menu' | 'options' | 'game' | 'result' | 'death';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('menu');
@@ -21,10 +22,9 @@ export default function App() {
   const handleEnd = (snap: GameSnapshot) => {
     setResult(snap);
     saveLastResult(snap, runConfig);
-    setScreen('result');
+    setScreen(snap.endReason === 'death' ? 'death' : 'result');
   };
 
-  // Restart in-place: nova referência de runConfig dispara recriação do Game
   const handleRestart = () => {
     setRunConfig({ ...runConfig });
     setScreen('game');
@@ -38,6 +38,7 @@ export default function App() {
           onOptions={() => setScreen('options')}
         />
       )}
+
       {screen === 'options' && (
         <Options
           initial={runConfig}
@@ -45,6 +46,7 @@ export default function App() {
           onCancel={() => setScreen('menu')}
         />
       )}
+
       {screen === 'game' && (
         <GameCanvas
           runConfig={runConfig}
@@ -53,6 +55,7 @@ export default function App() {
           onRestart={handleRestart}
         />
       )}
+
       {screen === 'result' && result && (
         <ResultScreen
           snapshot={result}
@@ -61,6 +64,21 @@ export default function App() {
           onMenu={() => setScreen('menu')}
         />
       )}
+
+      {screen === 'death' && result && (
+        <DeathScreen
+          snapshot={result}
+          runConfig={runConfig}
+          onPlayAgain={() => startGame({ ...runConfig })}
+          onMenu={() => setScreen('menu')}
+        />
+      )}
+
+      <img
+        src="/assets/logo_jungle_gaming.svg"
+        alt="Jungle Gaming"
+        className="app-logo"
+      />
     </div>
   );
 }

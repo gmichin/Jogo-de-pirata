@@ -13,8 +13,10 @@
 html, body, #root {
   margin: 0;
   padding: 0;
+  width: 100%;
   min-height: 100vh;
   background: var(--bg);
+  overflow: hidden; /* sem scroll em nenhuma tela */
 }
 
 body {
@@ -24,11 +26,27 @@ body {
 }
 
 .app {
+  position: relative;
   min-height: 100vh;
+  width: 100vw;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: 0;
+}
+
+/* Logo Jungle Gaming — fixa no canto inferior direito, em todas as telas */
+.app-logo {
+  position: fixed;
+  right: 10px;
+  bottom: 10px;
+  width: 96px;
+  max-width: 18vw;
+  height: auto;
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: 5000;
+  user-select: none;
 }
 
 /* ---------- Generic panels ---------- */
@@ -40,6 +58,7 @@ body {
   border-radius: 12px;
   max-width: 720px;
   width: 100%;
+  margin: 16px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 
@@ -145,7 +164,7 @@ button:focus-visible {
   margin-top: 12px;
   background: rgba(0, 0, 0, 0.15);
   border-radius: 8px;
-  padding: 16px;
+  padding: 12px;
 }
 
 .tab-panel ol,
@@ -164,13 +183,19 @@ button:focus-visible {
 }
 
 /* ---------- Options ---------- */
-.options label {
+.options .option-field {
   display: block;
   margin-bottom: 14px;
-  font-size: 14px;
-  font-weight: 600;
 }
 
+.options .option-field > span {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.options .option-input,
 .options input,
 .options select {
   display: block;
@@ -185,11 +210,14 @@ button:focus-visible {
   font-family: inherit;
 }
 
+.options .option-input:focus,
 .options input:focus,
 .options select:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
+.options .option-field .option-input { margin-top: 0; }
 
 .options-actions {
   display: flex;
@@ -197,6 +225,30 @@ button:focus-visible {
   margin-top: 16px;
 }
 
+/* ---- Time picker (60/90/120/150/180) ---- */
+.time-picker {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.time-picker .time-btn {
+  min-height: 50px;
+  padding: 8px 4px;
+  font-size: 16px;
+}
+
+.time-picker .time-btn.selected {
+  filter: brightness(1.15) drop-shadow(0 0 8px rgba(255, 209, 102, 0.85));
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+
+@media (max-width: 520px) {
+  .time-picker { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* ---------- Game screen ---------- */
 .game-screen {
   position: fixed;
   inset: 0;
@@ -205,6 +257,7 @@ button:focus-visible {
   padding: 0;
   margin: 0;
 }
+
 .arena-host {
   position: absolute;
   inset: 0;
@@ -212,6 +265,7 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
 }
+
 .arena-host canvas {
   display: block;
   width: 100%;
@@ -224,16 +278,13 @@ button:focus-visible {
   align-items: center; justify-content: center; gap: 16px;
   background: #06192b;
 }
+
 .loading-screen .progress {
   width: 260px; height: 8px; background: #143050; border-radius: 4px; overflow: hidden;
 }
+
 .loading-screen .progress > div {
   height: 100%; background: var(--accent); transition: width 0.15s ease;
-}
-
-
-@media (max-width: 640px) {
-  .ship-grid { grid-template-columns: repeat(4, 1fr); }
 }
 
 /* ---------- Ship picker ---------- */
@@ -274,25 +325,7 @@ button:focus-visible {
 
 .hud .hp-p1 { color: #f2e2b6; }
 .hud .hp-p2 { color: #8fd6ff; }
-.hud .paused {
-  color: var(--accent);
-  margin-left: auto;
-}
-
-.arena-host {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  background: #06192b;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.arena-host canvas {
-  max-width: 100%;
-  height: auto;
-  display: block;
-}
+.hud .paused { color: var(--accent); margin-left: auto; }
 
 .touch-controls {
   display: grid;
@@ -323,6 +356,7 @@ button:focus-visible {
   .hud { font-size: 13px; gap: 10px; }
 }
 
+/* ---------- Home ---------- */
 .home-screen {
   position: fixed;
   inset: 0;
@@ -357,7 +391,6 @@ button:focus-visible {
   overflow-y: auto;
 }
 
-/* ---- Título ---- */
 .title-image {
   max-width: min(440px, 78vw);
   width: 100%;
@@ -368,7 +401,6 @@ button:focus-visible {
   pointer-events: none;
 }
 
-/* ---- Painel do menu ---- */
 .menu-panel {
   background-image: url('/assets/png/default/ui/menu/panel_menu.png');
   background-size: 100% 100%;
@@ -437,21 +469,6 @@ button:focus-visible {
   margin: 0;
   padding-left: 18px;
 }
-.tab-content .pagination {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-top: 10px;
-  font-size: 12px;
-}
-.tab-content .pagination button {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text);
-  border: none;
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 12px;
-}
 
 /* ---- Instruções de controle ---- */
 .home-controls {
@@ -480,4 +497,183 @@ button:focus-visible {
   .home-controls ul { columns: 1; }
   .menu-panel { padding: 24px 26px; }
   .btn-primary { min-height: 46px; font-size: 15px; }
+}
+
+/* ---------- Data tables (Ranking / Histórico) ---------- */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  table-layout: fixed;
+}
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 5px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.data-table th {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.data-table td:first-child,
+.data-table th:first-child { width: 44px; }
+.data-table td:nth-child(2),
+.data-table th:nth-child(2) { width: auto; }
+
+/* ---------- Paginação por imagens ---------- */
+.img-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.page-btn {
+  background-color: transparent;
+  background-image: url('/assets/png/default/ui/controls/button_round_normal.png');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  border: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.page-btn:hover:not(:disabled) {
+  background-image: url('/assets/png/default/ui/controls/button_round_hover.png');
+}
+.page-btn:active:not(:disabled) {
+  background-image: url('/assets/png/default/ui/controls/button_round_pressed.png');
+}
+.page-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.page-btn img {
+  width: 55%;
+  height: 55%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+.page-info {
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 46px;
+  text-align: center;
+}
+
+/* ---------- Death screen (menu de morte) ---------- */
+.death-screen {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px;
+  overflow: hidden;
+  z-index: 100;
+}
+
+.death-logo {
+  max-width: min(320px, 55vw);
+  height: auto;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.6));
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Painel "deitado de lado" — mesma imagem do menu, alongada na horizontal */
+.death-panel {
+  background-image: url('/assets/png/default/ui/menu/panel_menu.png');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  width: min(880px, 94vw);
+  max-height: 68vh;
+  padding: 20px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.6));
+}
+
+.death-tabs {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.tab-btn {
+  background-color: transparent;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  border: none;
+  color: #10263a;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.3px;
+  padding: 10px 22px;
+  min-height: 42px;
+  cursor: pointer;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: filter 0.08s ease;
+}
+
+.tab-btn:not(.active) {
+  background-image: url('/assets/png/default/ui/menu/button_secondary_normal.png');
+}
+.tab-btn:not(.active):hover { filter: brightness(1.08); }
+.tab-btn:not(.active):active {
+  background-image: url('/assets/png/default/ui/menu/button_secondary_pressed.png');
+}
+
+.tab-btn.active {
+  background-image: url('/assets/png/default/ui/menu/button_primary_normal.png');
+}
+.tab-btn.active:hover { filter: brightness(1.05); }
+
+.death-tab-content {
+  flex: 1;
+  min-height: 200px;
+  max-height: 44vh;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: var(--text);
+}
+
+.death-tab-content .tab-panel {
+  margin-top: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.death-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+@media (max-width: 520px) {
+  .death-panel { padding: 14px 18px; }
+  .death-tab-content { max-height: 40vh; }
+  .tab-btn { padding: 8px 14px; font-size: 12px; min-height: 38px; }
+  .app-logo { width: 72px; }
 }

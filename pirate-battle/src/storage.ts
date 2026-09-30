@@ -9,11 +9,18 @@ export function loadOptions(): RunConfig {
     sessionTime: GAME_CONFIG.session.defaultDuration,
     spawnInterval: GAME_CONFIG.spawn.baseInterval,
     shipIndex: 0,
+    playerName: 'You',
   };
   try {
     const raw = localStorage.getItem(OPTS_KEY);
     if (!raw) return fallback;
     const parsed = JSON.parse(raw);
+
+    const name =
+      typeof parsed.playerName === 'string' && parsed.playerName.trim().length > 0
+        ? parsed.playerName.trim().slice(0, 20)
+        : fallback.playerName;
+
     return {
       sessionTime: clamp(
         Number(parsed.sessionTime) || fallback.sessionTime,
@@ -22,6 +29,7 @@ export function loadOptions(): RunConfig {
       ),
       spawnInterval: Math.max(0.5, Number(parsed.spawnInterval) || fallback.spawnInterval),
       shipIndex: clamp(Math.floor(Number(parsed.shipIndex) || 0), 0, 23),
+      playerName: name,
     };
   } catch {
     return fallback;
