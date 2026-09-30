@@ -5,7 +5,7 @@ import { GAME_CONFIG as C, ISLAND_SPECS, SHIP_INDEX, SHIP_ROTATION_OFFSET } from
 import { HealthBar } from './HealthBar';
 import type {
   Enemy, Entity, GameSnapshot, Player, PlayerId,
-  Projectile, Rect, RunConfig, Turret,
+  Projectile, RunConfig, Turret,
 } from './types';
 
 type OnEnd = (snapshot: GameSnapshot) => void;
@@ -57,6 +57,13 @@ interface Wreck {
   elapsed: number; maxLife: number; dead: boolean;
 }
 
+/** Rect de colisão absoluto, com raio de canto opcional. */
+interface CollisionRect {
+  x: number; y: number; w: number; h: number;
+  /** Raio dos cantos em pixels (0 = cantos retos). */
+  cornerRadius: number;
+}
+
 export class Game {
   private app: Application;
   private world: Container;
@@ -98,7 +105,8 @@ export class Game {
   private turrets: Turret[] = [];
   private projectiles: Projectile[] = [];
 
-  private islands: Rect[] = [];
+  /** Rects sólidos (com cantos possivelmente arredondados). */
+  private islands: CollisionRect[] = [];
 
   private wrecks: Wreck[] = [];
 
@@ -257,7 +265,7 @@ export class Game {
         ? this.textures.island1
         : this.textures.island2;
 
-      // Dimensões do sprite (mantendo a proporção da textura).
+      // Dimensões do sprite (mantendo proporção da textura).
       const iw = spec.wFrac * this.arenaW;
       const texW = tex.width || 1;
       const texH = tex.height || 1;
@@ -275,14 +283,18 @@ export class Game {
       sprite.height = ih;
       this.world.addChild(sprite);
 
-      // Colisão: usa `spec.collision` se definido; senão, imagem inteira.
-      const col = spec.collision ?? { xFrac: 0, yFrac: 0, wFrac: 1, hFrac: 1 };
-      this.islands.push({
-        x: ix + col.xFrac * iw,
-        y: iy + col.yFrac * ih,
-        w: col.wFrac * iw,
-        h: col.hFrac * ih,
-      });
+      // Colisão — usa `spec.collision` se definido; senão, imagem inteira.
+      const col = spec.collision ?? { xFrac: 0, yFrac: 0, wFrac: 1, hFrac: 1, cornerRadiusFrac: 0 };
+      const cw = col.wFrac * iw;
+      const ch = col.hFrac * ih;
+      const cxs = ix + col.xFrac * iw;
+      const cys = iy + col.yFrac * ih;
+
+      // Raio do canto: fração da largura da imagem, limitado a metade do menor lado do rect.
+      const crFrac = col.cornerRadiusFrac ?? 0;
+      const cr = Math.min(crFrac * iw, Math.min(cw, ch) / 2);
+
+      this.islands.push({ x: cxs, y: cys, w: cw, h: ch, cornerRadius: cr });
 
       // Torretas (frações locais da imagem inteira).
       for (let t = 0; t < spec.turrets.length; t++) {
@@ -304,10 +316,17 @@ export class Game {
     if (!this.debugCollision) return;
 
     for (const isl of this.islands) {
-      this.debugGfx
-        .rect(isl.x, isl.y, isl.w, isl.h)
-        .fill({ color: 0xff0000, alpha: 0.18 })
-        .stroke({ width: 3, color: 0xff0000 });
+      if (isl.cornerRadius > 0) {
+        this.debugGfx
+          .roundRect(isl.x, isl.y, isl.w, isl.h, isl.cornerRadius)
+          .fill({ color: 0xff0000, alpha: 0.18 })
+          .stroke({ width: 3, color: 0xff0000 });
+      } else {
+        this.debugGfx
+          .rect(isl.x, isl.y, isl.w, isl.h)
+          .fill({ color: 0xff0000, alpha: 0.18 })
+          .stroke({ width: 3, color: 0xff0000 });
+      }
     }
     for (const t of this.turrets) {
       this.debugGfx.circle(t.x, t.y, 3).fill({ color: 0xffff00 });
@@ -1305,27 +1324,83 @@ export class Game {
     return Math.hypot(x - this.player.x, y - this.player.y);
   }
 
+  /**
+   * Empurra a entidade para fora de cada rect de colisão.
+   * Suporta cantos arredondados via SDF (distância assinada) do
+   * "rounded box". Sem cantos (cornerRadius = 0), usa o rect normal.
+   */
   private resolveIslandCollisionEntity(e: { x: number; y: number; radius: number }) {
     for (const isl of this.islands) {
-      const nx = Math.max(isl.x, Math.min(isl.x + isl.w, e.x));
-      const ny = Math.max(isl.y, Math.min(isl.y + isl.h, e.y));
-      const dx = e.x - nx, dy = e.y - ny;
-      const d = Math.hypot(dx, dy);
-      if (d < e.radius) {
-        if (d === 0) {
-          const left = e.x - isl.x, right = isl.x + isl.w - e.x;
-          const top = e.y - isl.y, bottom = isl.y + isl.h - e.y;
-          const m = Math.min(left, right, top, bottom);
-          if (m === left) e.x = isl.x - e.radius;
-          else if (m === right) e.x = isl.x + isl.w + e.radius;
-          else if (m === top) e.y = isl.y - e.radius;
-          else e.y = isl.y + isl.h + e.radius;
-        } else {
-          const push = (e.radius - d) / d;
-          e.x += dx * push; e.y += dy * push;
-        }
+      if (isl.cornerRadius > 0) {
+        this.pushOutOfRoundedRect(e, isl);
+      } else {
+        this.pushOutOfRect(e, isl);
       }
     }
+  }
+
+  private pushOutOfRect(e: { x: number; y: number; radius: number }, isl: CollisionRect) {
+    const nx = Math.max(isl.x, Math.min(isl.x + isl.w, e.x));
+    const ny = Math.max(isl.y, Math.min(isl.y + isl.h, e.y));
+    const dx = e.x - nx, dy = e.y - ny;
+    const d = Math.hypot(dx, dy);
+    if (d < e.radius) {
+      if (d === 0) {
+        const left = e.x - isl.x, right = isl.x + isl.w - e.x;
+        const top = e.y - isl.y, bottom = isl.y + isl.h - e.y;
+        const m = Math.min(left, right, top, bottom);
+        if (m === left) e.x = isl.x - e.radius;
+        else if (m === right) e.x = isl.x + isl.w + e.radius;
+        else if (m === top) e.y = isl.y - e.radius;
+        else e.y = isl.y + isl.h + e.radius;
+      } else {
+        const push = (e.radius - d) / d;
+        e.x += dx * push; e.y += dy * push;
+      }
+    }
+  }
+
+  /**
+   * Colisão com um retângulo de cantos arredondados usando
+   * distância assinada (SDF). Empurra a entidade ao longo do gradiente
+   * até a SDF ser igual ao raio dela.
+   */
+  private pushOutOfRoundedRect(e: { x: number; y: number; radius: number }, isl: CollisionRect) {
+    const cx = isl.x + isl.w / 2;
+    const cy = isl.y + isl.h / 2;
+    const hw = isl.w / 2;
+    const hh = isl.h / 2;
+    const cr = isl.cornerRadius;
+
+    const dx = e.x - cx;
+    const dy = e.y - cy;
+
+    // Distância do centro ao "inner rect" (rect reduzido pelo raio).
+    const qx = Math.abs(dx) - (hw - cr);
+    const qy = Math.abs(dy) - (hh - cr);
+    const ax = Math.max(qx, 0);
+    const ay = Math.max(qy, 0);
+    const sd = Math.hypot(ax, ay) + Math.min(Math.max(qx, qy), 0) - cr;
+
+    if (sd >= e.radius) return;
+
+    // Gradiente (direção de afastamento).
+    const lenA = Math.hypot(ax, ay);
+    let nx: number, ny: number;
+    if (lenA > 0.0001) {
+      nx = (ax / lenA) * Math.sign(dx || 1);
+      ny = (ay / lenA) * Math.sign(dy || 1);
+    } else if (qx > qy) {
+      nx = Math.sign(dx || 1);
+      ny = 0;
+    } else {
+      nx = 0;
+      ny = Math.sign(dy || 1);
+    }
+
+    const push = e.radius - sd;
+    e.x += nx * push;
+    e.y += ny * push;
   }
 
   private isInsideAnyIsland(x: number, y: number, padding: number): boolean {
