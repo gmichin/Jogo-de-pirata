@@ -85,15 +85,6 @@ export const handlers = [
     const body = (await request.json()) as Omit<MatchRecord, 'id' | 'createdAt'>;
     const records = all();
     
-    const existing = records.find(
-      (r) =>
-        r.playerId === body.playerId &&
-        r.score === body.score &&
-        r.durationSec === body.durationSec &&
-        r.endReason === body.endReason
-    );
-    if (existing) return HttpResponse.json(existing);
-  
     const record: MatchRecord = {
       ...body,
       id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,

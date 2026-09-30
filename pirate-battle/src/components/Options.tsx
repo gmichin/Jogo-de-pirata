@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { GAME_CONFIG } from '../game/config';
 import type { RunConfig } from '../game/types';
 import { saveOptions } from '../storage';
 
