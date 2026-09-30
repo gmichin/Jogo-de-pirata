@@ -1,19 +1,23 @@
-import { Application, Container, Graphics, Texture, TilingSprite } from 'pixi.js';
-import { getIslands } from './config';
+import { Application, Container, Graphics, Sprite, Texture, TilingSprite } from 'pixi.js';
+import { ISLAND_SPECS } from './config';
 
 /**
- * Cena de fundo: apenas água + ilhas + borda.
+ * Cena de fundo: água + ilhas (usando as imagens reais) + borda.
  * Nenhum navio, torreta, HUD ou interação.
  */
 export class Backdrop {
   private app: Application;
   private host: HTMLElement;
   private water: Texture;
+  private island1: Texture;
+  private island2: Texture;
   private destroyed = false;
 
-  constructor(host: HTMLElement, water: Texture) {
+  constructor(host: HTMLElement, water: Texture, island1: Texture, island2: Texture) {
     this.host = host;
     this.water = water;
+    this.island1 = island1;
+    this.island2 = island2;
     this.app = new Application();
   }
 
@@ -41,11 +45,22 @@ export class Backdrop {
     });
     world.addChild(bg);
 
-    for (const isl of getIslands(w, h)) {
-      const g = new Graphics();
-      g.rect(isl.x, isl.y, isl.w, isl.h)
-        .fill('#c9b27a').stroke({ width: 4, color: '#6f5a2a' });
-      world.addChild(g);
+    // Desenha as ilhas reais mantendo a proporção original das imagens.
+    for (const spec of ISLAND_SPECS) {
+      const tex = spec.textureKey === 'island1' ? this.island1 : this.island2;
+      const iw = spec.wFrac * w;
+      const texW = tex.width || 1;
+      const texH = tex.height || 1;
+      const ih = iw * (texH / texW);
+      const ix = spec.xFrac * w;
+      const iy = spec.yFrac * h;
+
+      const sprite = new Sprite(tex);
+      sprite.x = ix;
+      sprite.y = iy;
+      sprite.width = iw;
+      sprite.height = ih;
+      world.addChild(sprite);
     }
 
     const border = new Graphics();

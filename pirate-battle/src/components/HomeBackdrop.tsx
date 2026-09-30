@@ -16,7 +16,7 @@ export default function HomeBackdrop() {
     loadGameTextures()
       .then((tex) => {
         if (cancelled || !hostRef.current) return;
-        backdrop = new Backdrop(hostRef.current, tex.tileWater);
+        backdrop = new Backdrop(hostRef.current, tex.tileWater, tex.island1, tex.island2);
         backdrop.init().catch((err) => console.error('Backdrop init failed', err));
       })
       .catch((err) => {

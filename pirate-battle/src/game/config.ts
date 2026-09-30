@@ -89,20 +89,63 @@ export const GAME_CONFIG = {
   },
 };
 
-export const ISLAND_FRACTIONS = [
-  { x: 0.2000, y: 0.2333, w: 0.1778, h: 0.2000 },
-  { x: 0.6889, y: 0.6333, w: 0.2000, h: 0.2333 },
-  { x: 0.4444, y: 0.4333, w: 0.1333, h: 0.1500 },
-] as const;
-
-export function getIslands(arenaW: number, arenaH: number) {
-  return ISLAND_FRACTIONS.map(f => ({
-    x: f.x * arenaW,
-    y: f.y * arenaH,
-    w: f.w * arenaW,
-    h: f.h * arenaH,
-  }));
+/**
+ * Especificação de uma ilha.
+ *
+ * IMPORTANTE — a proporção ORIGINAL da imagem é sempre preservada:
+ *   - `wFrac` define apenas a LARGURA (fração da largura da arena).
+ *   - A ALTURA é calculada automaticamente a partir do aspect ratio real da
+ *     textura (altura ÷ largura). Assim a imagem nunca fica esticada.
+ *
+ * Posição:
+ *   - `xFrac` / `yFrac` são o canto SUPERIOR-ESQUERDO em frações da arena.
+ *     Ex.: `xFrac: 0` → encosta na esquerda; `yFrac: 0` → encosta no topo.
+ *
+ * Torretas:
+ *   - `turrets[]` são posições em frações LOCAIS da própria imagem.
+ *     0,0 = canto sup-esq da imagem; 1,1 = canto inf-dir.
+ *
+ * Colisão:
+ *   - A colisão é a ÁREA INTEIRA da imagem (o barco não passa em lugar
+ *     nenhum que tenha sprite; só os tiros atravessam).
+ *
+ * Dica: aperte **K** dentro do jogo para ver a colisão (vermelho) e as
+ * torretas (amarelo).
+ */
+export interface IslandSpec {
+  xFrac: number;
+  yFrac: number;
+  wFrac: number;
+  textureKey: 'island1' | 'island2';
+  turrets: { xFrac: number; yFrac: number }[];
 }
+
+export const ISLAND_SPECS: IslandSpec[] = [
+  {
+    // Ilha 1 — canto superior esquerdo
+    xFrac: -0.02,
+    yFrac: -0.02,
+    wFrac: 0.40,
+    textureKey: 'island1',
+    turrets: [
+      { xFrac: 0.58, yFrac: 0.55 },
+      { xFrac: 0.92, yFrac: 0.55 },
+    ],
+  },
+  {
+    // Ilha 2 — canto inferior direito
+    // Obs.: como a ALTURA depende do aspect ratio da imagem, o `yFrac`
+    // pode não deixar a ilha exatamente colada no fundo — ajuste com K.
+    xFrac: 0.60,
+    yFrac: 0.55,
+    wFrac: 0.40,
+    textureKey: 'island2',
+    turrets: [
+      { xFrac: 0.11, yFrac: 0.47 },
+      { xFrac: 0.62, yFrac: 0.47 },
+    ],
+  },
+];
 
 export const SHIP_COUNT = 24;
 

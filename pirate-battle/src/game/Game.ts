@@ -1,7 +1,7 @@
 import {
   Application, Container, Graphics, Rectangle, Sprite, Text, TextStyle, Texture, TilingSprite,
 } from 'pixi.js';
-import { GAME_CONFIG as C, getIslands, SHIP_INDEX, SHIP_ROTATION_OFFSET } from './config';
+import { GAME_CONFIG as C, ISLAND_SPECS, SHIP_INDEX, SHIP_ROTATION_OFFSET } from './config';
 import { HealthBar } from './HealthBar';
 import type {
   Enemy, Entity, GameSnapshot, Player, PlayerId,
@@ -62,6 +62,10 @@ export class Game {
   private world: Container;
   private hudLayer: Container;
   private menuLayer: Container;
+  private debugLayer: Container;
+  private debugGfx: Graphics | null = null;
+  private debugCollision = false;
+
   private host: HTMLElement;
   private onEnd: OnEnd;
   private onQuit: () => void;
@@ -75,6 +79,7 @@ export class Game {
     fireLarge: Texture; fireSmall: Texture;
     cannonBall: Texture; cannon: Texture; ships: Texture[];
     tileCannonPlatform: Texture; tileWater: Texture;
+    island1: Texture; island2: Texture;
     healthFrame: Texture;
     healthFillGreen: Texture; healthFillAmber: Texture; healthFillRed: Texture;
     counterPanel: Texture;
@@ -92,7 +97,10 @@ export class Game {
   private enemies: Enemy[] = [];
   private turrets: Turret[] = [];
   private projectiles: Projectile[] = [];
+
+  /** Rects sólidos (imagem inteira das ilhas). Barcos não atravessam. */
   private islands: Rect[] = [];
+
   private wrecks: Wreck[] = [];
 
   private enemyBars = new Map<string, HealthBar>();
@@ -139,6 +147,7 @@ export class Game {
     this.world = new Container();
     this.hudLayer = new Container();
     this.menuLayer = new Container();
+    this.debugLayer = new Container();
     this.projectileAimGfx = new Graphics();
 
     this.snapshot = {
@@ -165,6 +174,7 @@ export class Game {
     });
     this.host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.world);
+    this.app.stage.addChild(this.debugLayer);
     this.app.stage.addChild(this.hudLayer);
     this.app.stage.addChild(this.menuLayer);
 
@@ -212,6 +222,10 @@ export class Game {
     if (e.key === ' ' || e.code === 'Space') e.preventDefault();
     this.keys[e.key] = true;
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
+    if (e.key === 'k' || e.key === 'K') {
+      this.debugCollision = !this.debugCollision;
+      this.refreshDebugGfx();
+    }
   };
   private onKeyUp = (e: KeyboardEvent) => { this.keys[e.key] = false; };
   private onBlur = () => {
@@ -237,22 +251,68 @@ export class Game {
     this.world.addChild(border);
   }
 
+  /**
+   * Desenha as ilhas mantendo a PROPORÇÃO ORIGINAL de cada imagem:
+   *  - `wFrac` define a largura.
+   *  - altura = largura × (alturaOriginal / larguraOriginal).
+   * A colisão é a imagem INTEIRA — o barco não atravessa em pixel algum.
+   */
   private spawnIslandsAndTurrets() {
-    const islands = getIslands(this.arenaW, this.arenaH);
-    for (let i = 0; i < islands.length; i++) {
-      const isl = islands[i];
-      this.islands.push({ ...isl });
+    for (let i = 0; i < ISLAND_SPECS.length; i++) {
+      const spec = ISLAND_SPECS[i];
+      const tex = spec.textureKey === 'island1'
+        ? this.textures.island1
+        : this.textures.island2;
 
-      const g = new Graphics();
-      g.rect(isl.x, isl.y, isl.w, isl.h)
-        .fill('#c9b27a').stroke({ width: 4, color: '#6f5a2a' });
-      this.world.addChild(g);
+      // Dimensões do sprite (mantendo proporção da textura).
+      const iw = spec.wFrac * this.arenaW;
+      const texW = tex.width || 1;
+      const texH = tex.height || 1;
+      const ih = iw * (texH / texW);
 
-      const corners = [
-        { x: isl.x,         y: isl.y         },
-        { x: isl.x + isl.w, y: isl.y + isl.h },
-      ];
-      corners.forEach((c, idx) => this.spawnTurret(i, idx, c.x, c.y));
+      // Posição do canto superior esquerdo na arena.
+      const ix = spec.xFrac * this.arenaW;
+      const iy = spec.yFrac * this.arenaH;
+
+      // Sprite.
+      const sprite = new Sprite(tex);
+      sprite.x = ix;
+      sprite.y = iy;
+      sprite.width = iw;
+      sprite.height = ih;
+      this.world.addChild(sprite);
+
+      // Colisão = área INTEIRA da imagem.
+      this.islands.push({ x: ix, y: iy, w: iw, h: ih });
+
+      // Torretas.
+      for (let t = 0; t < spec.turrets.length; t++) {
+        const tx = ix + spec.turrets[t].xFrac * iw;
+        const ty = iy + spec.turrets[t].yFrac * ih;
+        this.spawnTurret(i, t, tx, ty);
+      }
+    }
+
+    this.refreshDebugGfx();
+  }
+
+  private refreshDebugGfx() {
+    if (!this.debugGfx) {
+      this.debugGfx = new Graphics();
+      this.debugLayer.addChild(this.debugGfx);
+    }
+    this.debugGfx.clear();
+    if (!this.debugCollision) return;
+
+    for (const isl of this.islands) {
+      this.debugGfx
+        .rect(isl.x, isl.y, isl.w, isl.h)
+        .fill({ color: 0xff0000, alpha: 0.18 })
+        .stroke({ width: 3, color: 0xff0000 });
+    }
+    for (const t of this.turrets) {
+      this.debugGfx.circle(t.x, t.y, 3).fill({ color: 0xffff00 });
+      this.debugGfx.circle(t.x, t.y, t.radius).stroke({ width: 2, color: 0xffff00 });
     }
   }
 
@@ -430,8 +490,6 @@ export class Game {
     });
     this.playerBar.setPosition(barW / 2, C.healthBar.hudHeight / 2);
     left.addChild(this.playerBar.container);
-
-    // ícone de coração removido
 
     this.playerHpText = new Text({ text: '100', style: HUD_STYLE });
     this.playerHpText.anchor.set(0, 0.5);
@@ -834,9 +892,6 @@ export class Game {
           e.x += (dx / dist) * e.speed * dt;
           e.y += (dy / dist) * e.speed * dt;
         }  else {
-          // Sempre atualiza a direção para o player — usada como direção de caminhada.
-          // (Antes, aimDirection só era atualizada dentro do range, então o navio
-          //  andava para um lado e continuava "olhando" para outro.)
           e.aimDirection = Math.atan2(dy, dx);
 
           if (dist > C.shooter.attackRange * 0.8) {
@@ -862,7 +917,6 @@ export class Game {
       e.y = Math.max(e.radius, Math.min(this.arenaH - e.radius, e.y));
       this.resolveIslandCollisionEntity(e);
 
-      // Contato com o player: chaser e shooter morrem ao encostar
       if (target && Math.hypot(e.x - target.x, e.y - target.y) < e.radius + target.radius) {
         const dmg = e.kind === 'chaser' ? C.chaser.contactDamage : C.shooter.contactDamage;
         this.spawnExplosion(e.x, e.y, 'small');

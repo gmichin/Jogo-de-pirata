@@ -15,6 +15,9 @@ export interface GameTextures {
   // tiles
   tileCannonPlatform: Texture;
   tileWater: Texture;
+  // islands
+  island1: Texture;
+  island2: Texture;
   // HUD básico
   healthFrame: Texture;
   healthFillGreen: Texture;
@@ -66,6 +69,9 @@ export async function loadGameTextures(
     cannon:                '/assets/png/default/ship_parts/cannon.png',
     tileCannonPlatform:    '/assets/png/default/tiles/tile_13.png',
     tileWater:             '/assets/png/default/tiles/tile_73.png',
+    // Ilhas personalizadas
+    island1:               '/assets/ilha_1.png',
+    island2:               '/assets/ilha_2.png',
     healthFrame:           '/assets/png/default/ui/hud/health_frame.png',
     healthFillGreen:       '/assets/png/default/ui/hud/health_fill_green.png',
     healthFillAmber:       '/assets/png/default/ui/hud/health_fill_amber.png',
@@ -117,6 +123,8 @@ export async function loadGameTextures(
       cannon:               loadedMap.cannon,
       tileCannonPlatform:   loadedMap.tileCannonPlatform,
       tileWater:            loadedMap.tileWater,
+      island1:              loadedMap.island1,
+      island2:              loadedMap.island2,
       healthFrame:          loadedMap.healthFrame,
       healthFillGreen:      loadedMap.healthFillGreen,
       healthFillAmber:      loadedMap.healthFillAmber,
