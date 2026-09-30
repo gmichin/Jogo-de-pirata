@@ -40,7 +40,7 @@ export default function MainMenu({ onPlay, onOptions }: Props) {
               <div className="tab-content">
                 {tab === 'ranking' ? <Ranking /> : <MatchHistory />}
               </div>
-              <button className="btn-primary" onClick={() => setTab('main')}>Back</button>
+              <button className="btn-primary back-btn" onClick={() => setTab('main')}>Back</button>
             </>
           )}
         </div>

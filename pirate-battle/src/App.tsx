@@ -2,12 +2,11 @@ import { useState } from 'react';
 import MainMenu from './components/MainMenu';
 import Options from './components/Options';
 import GameCanvas from './components/GameCanvas';
-import ResultScreen from './components/ResultScreen';
 import DeathScreen from './components/DeathScreen';
 import { loadOptions, saveLastResult } from './storage';
 import type { GameSnapshot, RunConfig } from './game/types';
 
-type Screen = 'menu' | 'options' | 'game' | 'result' | 'death';
+type Screen = 'menu' | 'options' | 'game' | 'death';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('menu');
@@ -22,7 +21,8 @@ export default function App() {
   const handleEnd = (snap: GameSnapshot) => {
     setResult(snap);
     saveLastResult(snap, runConfig);
-    setScreen(snap.endReason === 'death' ? 'death' : 'result');
+    // Tanto vitória (time) quanto derrota (death) caem na mesma tela
+    setScreen('death');
   };
 
   const handleRestart = () => {
@@ -53,15 +53,6 @@ export default function App() {
           onEnd={handleEnd}
           onQuit={() => setScreen('menu')}
           onRestart={handleRestart}
-        />
-      )}
-
-      {screen === 'result' && result && (
-        <ResultScreen
-          snapshot={result}
-          runConfig={runConfig}
-          onPlayAgain={() => startGame({ ...runConfig })}
-          onMenu={() => setScreen('menu')}
         />
       )}
 

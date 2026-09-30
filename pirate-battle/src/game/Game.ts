@@ -833,14 +833,18 @@ export class Game {
           e.aimDirection = Math.atan2(dy, dx);
           e.x += (dx / dist) * e.speed * dt;
           e.y += (dy / dist) * e.speed * dt;
-        } else {
+        }  else {
+          // Sempre atualiza a direção para o player — usada como direção de caminhada.
+          // (Antes, aimDirection só era atualizada dentro do range, então o navio
+          //  andava para um lado e continuava "olhando" para outro.)
+          e.aimDirection = Math.atan2(dy, dx);
+
           if (dist > C.shooter.attackRange * 0.8) {
             e.x += (dx / dist) * e.speed * dt;
             e.y += (dy / dist) * e.speed * dt;
           }
           e.attackTimer -= dt;
           if (dist <= C.shooter.attackRange) {
-            e.aimDirection = Math.atan2(dy, dx);
             if (e.attackTimer <= 0) {
               e.attackTimer = C.shooter.attackCooldown + Math.random() * C.shooter.cooldownJitter;
               this.spawnProjectile('enemy', null,
